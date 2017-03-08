@@ -1,3 +1,11 @@
+# Ignore Mark's work
+2d/
+# Ignore plots
+1d/plots/
+
+*/.ropeproject/
+*.swp
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
