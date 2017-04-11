@@ -122,16 +122,18 @@ def simulate(params):
 
     for i_time in range(1, n_time):
         B = np.zeros((n_space))
-        if i_time < 15:
+        if i_time < input_duration:
             B[2*48:2*52] += input_strength
         # TODO: Get rid of E-I system.
         # NOTE: As written, subscripts reverse of Neumann code
-        JE = w[e][e] * np.matmul(l_weights[e][e], E[:, i_time-1]) + B + 0.1\
-            - w[e][i] * np.matmul(l_weights[e][i], I[:, i_time-1])
+        JE = w[e][e] * np.matmul(l_weights[e][e], E[:, i_time-1]) + B + 0.1 -\
+             w[e][i] * np.matmul(l_weights[e][i], I[:, i_time-1])
+        # 0.1
         # TODO: Get rid of arbitrary constants
-        JI = -0.2 * w[i][i] * np.matmul(l_weights[i][i], I[:, i_time-1]) + \
-            B + 0.1 \
-            + w[i][e] * np.matmul(l_weights[i][e], E[:, i_time-1])
+        JI = -0.2 * w[i][i] * np.matmul(l_weights[i][i], I[:, i_time-1]) + 0.1 + \
+            B +\
+             w[i][e] * np.matmul(l_weights[i][e], E[:, i_time-1])
+             # 0.1\ 
         JE_noise = awgn(JE, noise_SNR[e])
         JI_noise = awgn(JI, noise_SNR[i])
 
