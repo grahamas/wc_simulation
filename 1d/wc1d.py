@@ -16,23 +16,31 @@ import json
 import time
 import os
 
-from plotting import LineMovie, PlotDirectory
+import sys
+sys.path.append("..")
+from plotting import LinesMovie, PlotDirectory
 
-def calculate_weight_matrix(dx, N, s):
+DEFAULT_JSON_FILENAME = 'params_FromJack.json'
+
+# From Jeremy's code. Not sure what paper it corresponds to.
+def calculate_weight_matrix(dx, N, w, s):
     weight_mx = np.zeros((N, N))
     for i in range(N):
-        weight_mx[:, i] = np.exp(-np.abs(dx*(np.arange(N)-i))/s)*dx/(2*s)
+        # Note divided by 2*s, which is not in the original 1973 paper
+        # This normalizes the beta, to separate the scaling w from the space constant s
+        weight_mx[:, i] = w*np.exp(-np.abs(dx*(np.arange(N)-i+1))/s)*dx/(2*s)
     # TODO: Why?
-    weight_mx[:, [0, -1]] = weight_mx[:, [0, -1]] / 2
+    # This was in Jeremy's code, but I can't justify keeping it
+    # weight_mx[:, [0, -1]] = weight_mx[:, [0, -1]] / 2
     return weight_mx
 
 
-def calculate_weight_matrices(dx, n_space, S):
+def calculate_weight_matrices(dx, n_space, W, S):
     l_weights = []
     for dx1 in range(len(S)):
         row = []
         for dx2 in range(len(S[0])):
-            row += [calculate_weight_matrix(dx, n_space, S[dx1][dx2])]
+            row += [calculate_weight_matrix(dx, n_space, W[dx1][dx2], S[dx1][dx2])]
         l_weights += [row]
     return l_weights
 
@@ -49,21 +57,45 @@ def sigmoid(x, a, theta):
 def sigmoid_rectify(x, a, theta):
     return np.maximum(0, sigmoid(x, a, theta))
 
+# This is almost certainly the stupidest thing I've done while programming
+e = 0
+i = 1
+with open(DEFAULT_JSON_FILENAME, 'r') as default_json: 
+    DEFAULT_PARAMS = json.load(default_json)
 def interactive_simulate(run_name:str="Interactive",
-    n_space:int=201, dx:float=0.5, n_time:int=381, dt:float=0.01,
-    input_duration:int=55, input_strength:float=9.6,
-    sEE:float=2.5, sEI:float=2.7, sIE:float=2.7, sII:float=2.5, 
-    betaE:float=1.1, betaI:float=1.1,
-    alphaE:float=1.2, alphaI:float=1.0, 
-    aE:float=1.2, aI:float=1.0,
-    thetaE:float=2.6, thetaI:float=8.0,
-    wEE:float=16.0, wEI:float=91.0, wIE:float=27.0, wII:float=20.0,
-    tauE:float=0.1, tauI:float=0.18,
-    noise_SNRE:float=100, noise_SNRI:float=100):
+    n_space:int=DEFAULT_PARAMS['space'][0], 
+    dx:float=DEFAULT_PARAMS['space'][1], 
+    n_time:int=DEFAULT_PARAMS['time'][0], 
+    dt:float=DEFAULT_PARAMS['time'][1],
+    input_duration:int=DEFAULT_PARAMS['input'][0], 
+    input_strength:float=DEFAULT_PARAMS['input'][1],
+    input_width:int=DEFAULT_PARAMS['input'][2],
+    sEE:float=DEFAULT_PARAMS['s'][e][e], 
+    sEI:float=DEFAULT_PARAMS['s'][e][i], 
+    sIE:float=DEFAULT_PARAMS['s'][i][e], 
+    sII:float=DEFAULT_PARAMS['s'][i][i], 
+    betaE:float=DEFAULT_PARAMS['beta'][e], 
+    betaI:float=DEFAULT_PARAMS['beta'][i],
+    alphaE:float=DEFAULT_PARAMS['alpha'][e], 
+    alphaI:float=DEFAULT_PARAMS['alpha'][i], 
+    aE:float=DEFAULT_PARAMS['a'][e], 
+    aI:float=DEFAULT_PARAMS['a'][i],
+    thetaE:float=DEFAULT_PARAMS['theta'][e], 
+    thetaI:float=DEFAULT_PARAMS['theta'][i],
+    wEE:float=DEFAULT_PARAMS['w'][e][e], 
+    wEI:float=DEFAULT_PARAMS['w'][e][i], 
+    wIE:float=DEFAULT_PARAMS['w'][i][e], 
+    wII:float=DEFAULT_PARAMS['w'][i][i],
+    tauE:float=DEFAULT_PARAMS['tau'][e], 
+    tauI:float=DEFAULT_PARAMS['tau'][i],
+    noise_SNRE:float=DEFAULT_PARAMS['noise_SNR'][e], 
+    noise_SNRI:float=DEFAULT_PARAMS['noise_SNR'][i],
+    mean_background_inputE:float=DEFAULT_PARAMS['mean_background_input'][e], 
+    mean_background_inputI:float=DEFAULT_PARAMS['mean_background_input'][i]):
     arg_dict = {
         'space': [n_space, dx],
         'time': [n_time, dt],
-        'input': [input_duration, input_strength],
+        'input': [input_duration, input_strength, input_width],
         's': [[sEE, sEI], [sIE, sII]],
         'beta': [betaE, betaI],
         'alpha': [alphaE, alphaI],
@@ -71,11 +103,13 @@ def interactive_simulate(run_name:str="Interactive",
         'theta': [thetaE, thetaI],
         'w': [[wEE, wEI], [wIE, wII]],
         'tau': [tauE, tauI],
-        'noise_SNR': [noise_SNRE, noise_SNRI]
+        'noise_SNR': [noise_SNRE, noise_SNRI],
+        'mean_background_input': [mean_background_inputE, 
+            mean_background_inputI]
     }
     E, I = simulate(arg_dict)
     plt_dir = PlotDirectory(run_name, arg_dict)
-    lE = LineMovie(E, save_to=plt_dir.pathify('_E_movie.mp4'))
+    lE = LinesMovie([E, I, E+I], save_to=plt_dir.pathify('_E_movie.mp4'))
     plt.show()
 
 # interact_manual(interactive_simulate, run_name='interactive',
@@ -93,12 +127,12 @@ def interactive_simulate(run_name:str="Interactive",
 
 def simulate(params):
     # n_dims = 2
-    e = 0
-    i = 1
+    e_dx = 0
+    i_dx = 1
 
     n_space, dx = params['space']
     n_time, dt = params['time']
-    input_duration, input_strength = params['input']
+    input_duration, input_strength, input_width = params['input']
     s = params['s']
     beta = params['beta']
     alpha = params['alpha']
@@ -109,6 +143,7 @@ def simulate(params):
     w = params['w']
     tau = params['tau']
     noise_SNR = params['noise_SNR']
+    mean_background_input = params['mean_background_input']
 
     E = np.zeros((n_space, n_time))
     I = np.zeros((n_space, n_time))
@@ -118,38 +153,45 @@ def simulate(params):
     max_wave_in_time = np.zeros((n_space, 1))
     max_wave_in_time_dx = np.zeros((n_space, 1))
 
-    l_weights = calculate_weight_matrices(dx, n_space, s)
+    l_weights = calculate_weight_matrices(dx, n_space, w, s)
 
-    for i_time in range(1, n_time):
-        B = np.zeros((n_space))
+    median_dx = n_space // 2
+    half_input = input_width // 2
+    assert half_input < median_dx
+    if input_width % 2:
+        input_slice = range(median_dx - half_input, median_dx + half_input)
+    else:
+        input_slice = range(median_dx - half_input, median_dx + half_input - 1)
+
+    for i_time in range(2, n_time):
+        external_input = np.zeros((n_space))
         if i_time < input_duration:
-            B[2*48:2*52] += input_strength
+            external_input[input_slice] += input_strength
         # TODO: Get rid of E-I system.
         # NOTE: As written, subscripts reverse of Neumann code
-        JE = w[e][e] * np.matmul(l_weights[e][e], E[:, i_time-1]) + B + 0.1 -\
-             w[e][i] * np.matmul(l_weights[e][i], I[:, i_time-1])
-        # 0.1
-        # TODO: Get rid of arbitrary constants
-        JI = -0.2 * w[i][i] * np.matmul(l_weights[i][i], I[:, i_time-1]) + 0.1 + \
-            B +\
-             w[i][e] * np.matmul(l_weights[i][e], E[:, i_time-1])
-             # 0.1\ 
-        JE_noise = awgn(JE, noise_SNR[e])
-        JI_noise = awgn(JI, noise_SNR[i])
+        JE = np.matmul(l_weights[e_dx][e_dx], E[:, i_time-1])\
+            - np.matmul(l_weights[e_dx][i_dx], I[:, i_time-1])\
+            + external_input + mean_background_input[e_dx]
 
-        FE = sigmoid_rectify(JE_noise, a[e], theta[e])
-        FI = sigmoid_rectify(JI_noise, a[i], theta[i])
-        # FI = 1 / (1 + np.exp(-a[i] * (JI_noise - theta[i])))
+        JI = -np.matmul(l_weights[i_dx][i_dx], I[:, i_time-1])\
+             + np.matmul(l_weights[i_dx][e_dx], E[:, i_time-1])\
+             + external_input + mean_background_input[i_dx]
+        JE_noise = awgn(JE, noise_SNR[e_dx])
+        JI_noise = awgn(JI, noise_SNR[i_dx])
 
-        E[:, i_time] = E[
-            :, i_time-1] + dt * (-(alpha[e] * E[:, i-1]) +
-                                 (1-E[:, i-1])*beta[e]*FE)/tau[e]
-        I[:, i_time] = I[
-            :, i_time-1] + dt * (-(alpha[i] * I[:, i-1]) +
-                                 (1-I[:, i-1])*beta[i]*FI)/tau[i]
+        # TODO: Introduce scaling parameter
+        FE = sigmoid_rectify(JE_noise, a[e_dx], theta[e_dx])
+        FI = sigmoid_rectify(JI_noise, a[i_dx], theta[i_dx])
+        #FI = np.maximum(0, 1 / (1 + np.exp(-a[i] * (JI_noise - theta[i]))))
 
-        max_dx = np.argmax(
-            E[:, i_time] - I[:, i_time])
+        E[:, i_time] = E[:, i_time-1]\
+                + dt * (-(alpha[e_dx] * E[:, i_time-1]) \
+                + (1-E[:, i_time-1])*FE)/tau[e]
+        I[:, i_time] = I[:, i_time-1] \
+                + dt * (-(alpha[i_dx] * I[:, i_time-1]) \
+                + (1-I[:, i_time-1])*FI)/tau[i]
+
+        max_dx = np.argmax(E[:, i_time] - I[:, i_time])
         max_wave_dx[0, i_time] = max_dx
         max_wave[0, i_time] = E[max_dx, i_time] - I[max_dx, i_time]
     for i_space in range(n_space):
@@ -197,4 +239,5 @@ if __name__ == "__main__":
     plt.close()
     plot_code_p101(I, dx, l_time_point)
     plt_dir.savefig(plot_prefix + '_I.png')
-    E_movie = LineMovie(E, save_to=plt_dir.pathify(plot_prefix+'_E_movie.mp4'))
+    step = 3
+    E_movie = LinesMovie([E[::step], I[::step], E[::step]+I[::step]], save_to=plt_dir.pathify(plot_prefix+'_E_movie.mp4'), lines=True)

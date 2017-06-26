@@ -33,32 +33,34 @@ class PlotDirectory(object):
         plt.savefig(self.pathify(name, subdir))
 
 
-class LineMovie(object):
-    def __init__(self, matrix, run=True, save_to=''):
-        self.matrix = matrix
-        self.n_data, self.n_time = self.matrix.shape
-
+class LinesMovie(object):
+    def __init__(self, matrices, run=True, save_to=''):
         self.fig, self.ax = plt.subplots()
+        self.matrices = matrices
+        self.n_data, self.n_time = self.matrices[0].shape
         self.x_data = np.linspace(-1, 1, self.n_data)
-        self.line, = plt.plot([], [], 'ro', animated=True)
+        assert all([(self.n_data, self.n_time) == matrix.shape for matrix in self.matrices])
+        self.lines = tuple(plt.plot([], [], animated=True)[0] for matrix in self.matrices)        
         if run:
             self.run()
         if save_to:
             self.save(save_to)
 
     def anim_init(self):
-        y_max = np.max(self.matrix)
-        y_min = np.min(self.matrix)
+        y_max = max(map(np.max, self.matrices))
+        y_min = min(map(np.min, self.matrices))
         x_max = 1
         x_min = -1
         self.ax.set_xlim(x_min, x_max)
         self.ax.set_ylim(y_min, y_max)
-        self.line.set_data(self.x_data, np.zeros_like(self.x_data))
-        return self.line,
+        for line in self.lines:
+            line.set_data(self.x_data, np.zeros_like(self.x_data))
+        return self.lines
 
     def anim_update(self, i_frame):
-        self.line.set_data(self.x_data, self.matrix[:,i_frame])
-        return self.line,
+        for line, matrix in zip(self.lines, self.matrices):
+            line.set_data(self.x_data, matrix[:,i_frame])
+        return self.lines
 
     def run(self):
         self.animation = animation.FuncAnimation(self.fig, self.anim_update, 
