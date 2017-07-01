@@ -32,8 +32,8 @@ def calculate_weight_matrix(dx, N, w, s):
         # space constant s
         weight_mx[i, :] = w*np.exp(-np.abs(dx*(np.arange(N)-i))/s)*dx/(2*s)
     # This was in Jeremy's code, but I don't know why
-    weight_mx[0, :] = weight_mx[0, :] / 2
-    weight_mx[-1, :] = weight_mx[-1, :] / 2
+    #weight_mx[0, :] = weight_mx[0, :] / 2
+    #weight_mx[-1, :] = weight_mx[-1, :] / 2
     return weight_mx
 
 def calculate_weight_matrices(dx, n_space, W, S):
@@ -143,6 +143,17 @@ def interactive_widget(widget_module, json_filename):
                 noise_SNRE=(75,115,1),noise_SNRI=(75,115,1),
                 mean_background_inputE=(0,2,0.1), mean_background_inputI=(0,2,0.1))
 
+def central_window(total_len, window_width):
+    median_dx = total_len // 2
+    half_width = window_width // 2
+    assert half_width < median_dx
+    if window_width % 2: # is odd
+        window_slice = range(median_dx - half_width, median_dx + half_width + 1)
+    else:
+        window_slice = range(median_dx - half_width, median_dx + half_width)
+    assert len(window_slice) == window_width
+    return window_slice
+
 def simulate_from_json(json_filename):
     with open(json_filename, 'r') as default_json:
         params = json.load(default_json)
@@ -223,13 +234,7 @@ def simulate(params):
 
     l_weights = calculate_weight_matrices(dx, n_space, w, s)
 
-    median_dx = n_space // 2
-    half_input = input_width // 2
-    assert half_input < median_dx
-    if input_width % 2:
-        input_slice = range(median_dx - half_input, median_dx + half_input)
-    else:
-        input_slice = range(median_dx - half_input, median_dx + half_input - 1)
+    input_slice = central_window(n_space, input_width)
 
     for i_time in range(2, n_time):
         #import pdb; pdb.set_trace()
@@ -251,7 +256,6 @@ def simulate(params):
         # TODO: Introduce scaling parameter
         FE = sigmoid_norm_rectify(JE_noise, a[e_dx], theta[e_dx])
         FI = sigmoid_rectify(JI_noise, a[i_dx], theta[i_dx])
-        #FI = np.maximum(0, 1 / (1 + np.exp(-a[i_dx] * (JI_noise - theta[i_dx]))))
 
         E[:, i_time] = E[:, i_time-1]\
                 + dt * (-(alpha[e_dx] * E[:, i_time-1]) \
