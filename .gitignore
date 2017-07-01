@@ -1,3 +1,5 @@
+*.sublime-workspace
+
 # Ignore Mark's work
 2d/
 # Ignore plots
