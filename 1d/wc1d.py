@@ -5,12 +5,14 @@
 #
 # Versions:
 #   7 Mar 2017  Begin
-#   1 Jul 2017  Successfully replicated (Neuman 2015)
+#   1 Jul 2017  Successfully replicated Neuman 2015
+#   6 Jul 2017  Abstracted WC implementation to passing function to solver
+#   6 Jul 2017  Made entire calculation matrix ops, no explicit populations
 
 # Differences introduced from (Neuman 2015):
 #   Edges of weight matrix are not halved
 #       (see Neuman, p98, mid-page, a.k.a. lines 39-42 of JN's script)
-#   Inhibitory sigmoid function is translated to S(0) = 0.
+#   Inhibitory sigmoid function is translated to S(0) = 0
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,26 +32,41 @@ from plotting import LinesMovieFromSepPops, PlotDirectory
 
 # json tools
 def read_jsonfile(filename):
+    """Reads jsonfile of name filename and returns contents as dict."""
     with open(filename, 'r') as f:
         params = json.load(f)
     return params
 def load_json_with(loader, pass_name=False):
     """
-        A decorator for functions that take only a dict that can be
-        loaded from a json. The decorator takes a function that loads
-        the jsonfile as an argument.
+        A decorator for functions whose first argument is a dict
+        that could be loaded from a json-file.
+
+        If the first argument is a string rather than a dict, the wrapper
+        tries to load a file with that string name and then pass the
+        loaded dict (along with the filename, optionally) to the
+        wrapped function.
     """
     def decorator(func=read_jsonfile):
-        def wrapped(*args):
+        def wrapper(*args):
             if isinstance(args[0], str):
                 loaded = loader(args[0])
-                run_name = os.path.splitext(args[0])[0]
-                return func(loaded, run_name) if pass_name else func(loaded)
+                if pass_name:
+                    run_name = os.path.splitext(args[0])[0]
+                    out_args = [loaded, run_name, *args[1:]]
+                else:
+                    out_args = [loaded, *args[1:]]
+                return func(*out_args)
             else:
                 return func(*args)
-        return wrapped
+        return wrapper
     return decorator
 def get_neuman_params_from_json(json_filename):
+    """
+        This is secretly completely useless (a holdover from the widget
+        used in Jupyter, where this rigamarole is necessary), but I
+        won't change it just yet. It  might be necessary once I come up
+        with a more general json format for parameters.
+    """
     params = read_jsonfile(json_filename)
     run_name = os.path.splitext(json_filename)[0]
     n_space = params['space'][0]
@@ -102,17 +119,23 @@ def get_neuman_params_from_json(json_filename):
     print('WARNING: Using Neuman equations without refraction.')
     return params
 
-
-# From Jeremy's code. Not sure what paper it corresponds to.
 def calculate_weight_matrix(dx, N, w, s):
+    """
+        Calculates a weight matrix for the case of 1D WC with
+        exponentially decaying spatial connectivity.
+    """
     weight_mx = np.zeros((N, N))
     for i in range(N):
         weight_mx[i, :] = w*np.exp(-np.abs(dx*(np.arange(N)-i))/s)*dx/(2*s)
         # The division by 2*s normalizes the beta,
         # to separate the scaling w from the space constant s
     return weight_mx
-
 def calculate_weight_matrices(dx, n_space, W, S):
+    """
+        Given N x N matrix of population interaction weights (and sigmas),
+        this calculates the convolution matrix for each, returning
+        an NxN matrix of n_space x n_space convolution matrices.
+    """
     l_weights = []
     for dx1 in range(len(S)):
         row = []
@@ -121,8 +144,11 @@ def calculate_weight_matrices(dx, n_space, W, S):
                                                 S[dx1][dx2])]
         l_weights += [row]
     return l_weights
-
 def calculate_connectivity_mx(*args):
+    """
+        This concatenates the list of matrices returned by
+        calculate_weight_matrices.
+    """
     # TODO: remove intermediate "calculate_weight_matrices"
     mx_list = calculate_weight_matrices(*args)
     return np.concatenate(
@@ -130,21 +156,27 @@ def calculate_connectivity_mx(*args):
         axis=0)
 
 def awgn(arr, *, snr):
+    """Add Gaussian white noise to arr."""
     return arr + np.sqrt(np.power(10.0, -snr/10)) * np.random.randn(*arr.shape)
 
 def sigmoid(x, a, theta):
+    """Standard two-parameter sigmoid."""
     return 1 / (1 + np.exp(-a * (x - theta)))
-
 def sigmoid_norm(x, a, theta):
+    """Sigmoid translated so that S(0) = 0"""
     return sigmoid(x,a,theta) - sigmoid(0,a,theta)
-
 def sigmoid_norm_rectify(x,*, a, theta):
+    """Sigmoid normed as above and rectified so S(x) = 0 for all x <= 0"""
     return np.maximum(0, sigmoid_norm(x, a, theta))
-
 def sigmoid_rectify(x,*, a, theta):
+    """Sigmoid rectified so S(x) = 0 for all x < 0"""
     return np.maximum(0, sigmoid(x,a,theta))
 
 def central_window(total_len, window_width):
+    """
+        Calculate indices for a region of width window_width roughly in the
+        center of an array of length total_len.
+    """
     median_dx = total_len // 2
     half_width = window_width // 2
     assert half_width < median_dx
@@ -156,8 +188,13 @@ def central_window(total_len, window_width):
     return window_slice
 
 def makefn_interactive_simulate_neuman(json_filename):
-    # The factory is necessary so that Jupyter's autoreload
-    # functionality works correctly.
+    """
+        Returns a function for use by a Jupyter widget in simulating
+        Neuman's 2015 implementation of the Wilson-Cowan equations.
+
+        It is necessary to use a factory so that Jupyter's autoreload
+        functionality works correctly.
+    """
     with open(json_filename, 'r') as default_json:
         DEFAULT_PARAMS = json.load(default_json)
     # This is almost certainly the stupidest thing I've done while programming
@@ -213,9 +250,11 @@ def makefn_interactive_simulate_neuman(json_filename):
         print('WARNING: Using Neuman equations without refraction.')
         make_simulation_movie(params, run_name)
     return interactive_simulate
-
-# Use this in Jupyter notebook
 def interactive_widget_neuman(widget_module, json_filename):
+    """
+        Creates a widget that allows playing with the parameters of
+        Neuman's 2015 implementation of the Wilson-Cowan equations.
+    """
     if __debug__:
         print("Debugging")
     else:
@@ -237,22 +276,31 @@ def interactive_widget_neuman(widget_module, json_filename):
                 mean_background_inputE=(0,2,0.1), mean_background_inputI=(0,2,0.1))
 
 def euler_generator(dt, n_time, y0, F):
+    """
+        Integrates a differential equation, F, starting at time 0 and
+        initial state y0 for n_time steps of increment dt.
+
+        NOTE: The equation F must take the state of the previous time
+        step and the current INDEX.
+
+        Uses Euler's method.
+
+        Yields the result at each step (is a generator).
+    """
     y = y0
     for i_time in range(n_time):
         y = y + dt*F(y, i_time)
         yield(y, i_time)
-
-def makefn_wilson_cowan(vr_time_constant, vr_alpha, vr_beta,
-    mx_connectivity, vr_current, fn_nonlinearity, fn_input):
-    def wilson_cowan(activity, i_time):
-        vr_stimulus = fn_input(i_time)
-        return (-vr_alpha * activity + (1 - activity) * vr_beta\
-            * fn_nonlinearity(mx_connectivity @ activity
-                + vr_current + vr_stimulus))/vr_time_constant
-    return wilson_cowan
-
-def makefn_from_neuman(*, space, time, stimulus, s, beta, alpha, r,
+def makefn_neuman_implementation(*, space, time, stimulus, s, beta, alpha, r,
     theta, a, w, tau, noise_SNR, mean_background_input):
+    """
+        Returns a function that implements the Wilson-Cowan equations
+        as parametrized in Neuman 2015.
+
+        The RETURNED function takes the previous activity state and the
+        current time index as arguments, returning the dy/dt at the
+        current time index.
+    """
     n_space, dx = space
     n_time, dt = time
     n_population = len(tau)
@@ -279,18 +327,26 @@ def makefn_from_neuman(*, space, time, stimulus, s, beta, alpha, r,
     blank_input = fn_expand_param_in_population(np.zeros(n_space))
     one_pop_stim =  np.zeros(n_space)
     one_pop_stim[input_slice] = one_pop_stim[input_slice] + input_strength
-    vr_stimulus = fn_expand_param_in_population(one_pop_stim)
+    stimulus_input = fn_expand_param_in_population(one_pop_stim)
 
     def fn_input(i_time):
         if i_time <= input_duration:
-            return vr_stimulus
+            return stimulus_input
         else:
             return blank_input
 
-    return makefn_wilson_cowan(vr_time_constant, vr_alpha, vr_beta,
-        mx_connectivity, vr_current, fn_nonlinearity, fn_input)
+    def neuman_implementation(activity, i_time):
+        vr_stimulus = fn_input(i_time)
+        return (-vr_alpha * activity + (1 - activity) * vr_beta\
+            * fn_nonlinearity(mx_connectivity @ activity
+                + vr_current + vr_stimulus)) / vr_time_constant
 
+    return neuman_implementation
 def simulate_neuman(*, space, time, **params):
+    """
+        Simulates the Wilson-Cowan equation using Neuman's 2015
+        parametrization and Euler's method (also as in Neuman 2015).
+    """
     n_populations = 2
     n_space, dx = space
     n_time, dt = time
@@ -298,7 +354,8 @@ def simulate_neuman(*, space, time, **params):
     activity = np.zeros((n_time, n_populations, n_space))
     y0 = np.concatenate((np.zeros(n_space), np.zeros(n_space)), axis=0)
 
-    fn_wilson_cowan = makefn_from_neuman(space=space, time=time, **params)
+    fn_wilson_cowan = makefn_neuman_implementation(space=space, time=time,
+        **params)
 
     for y, i_time in euler_generator(dt, n_time, y0, fn_wilson_cowan):
         activity[i_time,:,:] = y.reshape((n_populations, n_space))
@@ -307,6 +364,9 @@ def simulate_neuman(*, space, time, **params):
 
 @load_json_with(get_neuman_params_from_json, pass_name=True)
 def make_simulation_movie(params, run_name):
+    """
+        Make a movie of the simulation resulting from simulate_neuman.
+    """
     n_space, dx = params["space"]
     activity = simulate_neuman(**params)
     E = activity[:,0,:]
@@ -315,5 +375,3 @@ def make_simulation_movie(params, run_name):
     lE = LinesMovieFromSepPops([E, I, E+I],
             save_to=plt_dir.pathify('activity_movie.mp4'))
     plt.show()
-
-
