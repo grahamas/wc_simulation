@@ -22,6 +22,7 @@ matplotlib.verbose.set_level("helpful")
 import json
 import time
 import os
+import scipy
 
 import itertools
 import functools
@@ -69,53 +70,7 @@ def get_neuman_params_from_json(json_filename):
     """
     params = read_jsonfile(json_filename)
     run_name = os.path.splitext(json_filename)[0]
-    n_space = params['space'][0]
-    dx = params['space'][1]
-    n_time = params['time'][0]
-    dt = params['time'][1]
-    input_duration = params['stimulus'][0]
-    input_strength = params['stimulus'][1]
-    input_width = params['stimulus'][2]
-    e_dx = 0
-    i_dx = 1
-    sEE = params['s'][e_dx][e_dx]
-    sEI = params['s'][e_dx][i_dx]
-    sIE = params['s'][i_dx][e_dx]
-    sII = params['s'][i_dx][i_dx]
-    betaE = params['beta'][e_dx]
-    betaI = params['beta'][i_dx]
-    alphaE = params['alpha'][e_dx]
-    alphaI = params['alpha'][i_dx]
-    aE = params['a'][e_dx]
-    aI = params['a'][i_dx]
-    thetaE = params['theta'][e_dx]
-    thetaI = params['theta'][i_dx]
-    wEE = params['w'][e_dx][e_dx]
-    wEI = params['w'][e_dx][i_dx]
-    wIE = params['w'][i_dx][e_dx]
-    wII = params['w'][i_dx][i_dx]
-    tauE = params['tau'][e_dx]
-    tauI = params['tau'][i_dx]
-    noise_SNRE = params['noise_SNR'][e_dx]
-    noise_SNRI = params['noise_SNR'][i_dx]
-    mean_background_inputE = params['mean_background_input'][e_dx]
-    mean_background_inputI = params['mean_background_input'][i_dx]
-    params = {
-            'space': [n_space, dx],
-            'time': [n_time, dt],
-            'stimulus': [input_duration, input_strength, input_width],
-            's': [[sEE, sEI], [sIE, sII]],
-            'beta': [betaE, betaI],
-            'alpha': [alphaE, alphaI],
-            'a': [aE, aI],
-            'theta': [thetaE, thetaI],
-            'w': [[wEE, wEI], [wIE, wII]],
-            'tau': [tauE, tauI],
-            'noise_SNR': [noise_SNRE, noise_SNRI],
-            'mean_background_input': [mean_background_inputE,
-                mean_background_inputI],
-            'r': [1,1]
-        }
+    params['r'] = [1,1]
     print('WARNING: Using Neuman equations without refraction.')
     return params
 
@@ -289,8 +244,9 @@ def euler_generator(dt, n_time, y0, F):
     """
     y = y0
     for i_time in range(n_time):
-        y = y + dt*F(y, i_time)
-        yield(y, i_time)
+        time = dt * i_time
+        y = y + dt*F(y,time)
+        yield(y, time)
 def makefn_neuman_implementation(*, space, time, stimulus, s, beta, alpha, r,
     theta, a, w, tau, noise_SNR, mean_background_input):
     """
@@ -329,14 +285,14 @@ def makefn_neuman_implementation(*, space, time, stimulus, s, beta, alpha, r,
     one_pop_stim[input_slice] = one_pop_stim[input_slice] + input_strength
     stimulus_input = fn_expand_param_in_population(one_pop_stim)
 
-    def fn_input(i_time):
-        if i_time <= input_duration:
+    def fn_input(time):
+        if time <= input_duration*dt:
             return stimulus_input
         else:
             return blank_input
 
-    def neuman_implementation(activity, i_time):
-        vr_stimulus = fn_input(i_time)
+    def neuman_implementation(activity, time):
+        vr_stimulus = fn_input(time)
         return (-vr_alpha * activity + (1 - activity) * vr_beta\
             * fn_nonlinearity(mx_connectivity @ activity
                 + vr_current + vr_stimulus)) / vr_time_constant
@@ -357,8 +313,10 @@ def simulate_neuman(*, space, time, **params):
     fn_wilson_cowan = makefn_neuman_implementation(space=space, time=time,
         **params)
 
-    for y, i_time in euler_generator(dt, n_time, y0, fn_wilson_cowan):
+    i_time = 0
+    for y, time in euler_generator(dt, n_time, y0, fn_wilson_cowan):
         activity[i_time,:,:] = y.reshape((n_populations, n_space))
+        i_time += 1
 
     return activity
 
