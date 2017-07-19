@@ -48,7 +48,7 @@ def load_json_with(loader, pass_name=False):
         wrapped function.
     """
     def decorator(func=read_jsonfile):
-        def wrapper(*args):
+        def wrapper(*args, **kwargs):
             if isinstance(args[0], str):
                 loaded = loader(args[0])
                 if pass_name:
@@ -56,9 +56,9 @@ def load_json_with(loader, pass_name=False):
                     out_args = [loaded, run_name, *args[1:]]
                 else:
                     out_args = [loaded, *args[1:]]
-                return func(*out_args)
+                return func(*out_args, **kwargs)
             else:
-                return func(*args)
+                return func(*args, **kwargs)
         return wrapper
     return decorator
 def get_neuman_params_from_json(json_filename):
@@ -210,10 +210,6 @@ def interactive_widget_neuman(widget_module, json_filename):
         Creates a widget that allows playing with the parameters of
         Neuman's 2015 implementation of the Wilson-Cowan equations.
     """
-    if __debug__:
-        print("Debugging")
-    else:
-        print("NOT debugging")
     fn_interactive_simulate = makefn_interactive_simulate_neuman(json_filename)
     return widget_module.interact_manual(fn_interactive_simulate,
                 run_name=os.path.splitext(json_filename)[0],
@@ -320,16 +316,33 @@ def simulate_neuman(*, space, time, **params):
 
     return activity
 
-@load_json_with(get_neuman_params_from_json, pass_name=True)
-def make_simulation_movie(params, run_name):
+@load_json_with(get_neuman_params_from_json, pass_name=False)
+def make_simulation_movie(params, run_name, modifications=None,
+    movie_show=True, spacetime_show=True, skip_movies=False):
     """
         Make a movie of the simulation resulting from simulate_neuman.
     """
     n_space, dx = params["space"]
+    if modifications:
+        for key, value in modifications.items():
+            params[key] = value
     activity = simulate_neuman(**params)
     E = activity[:,0,:]
     I = activity[:,1,:]
     plt_dir = PlotDirectory(run_name, params)
-    lE = LinesMovieFromSepPops([E, I, E+I],
-            save_to=plt_dir.pathify('activity_movie.mp4'))
-    plt.show()
+    plt.clf()
+    if not skip_movies:
+        LinesMovieFromSepPops([E, I, E+I],
+                save_to=plt_dir.pathify('activity_movie.mp4'))
+        LinesMovieFromSepPops(
+                [np.transpose(E), np.transpose(I), np.transpose(E+I)],
+                save_to=plt_dir.pathify('activity_space_frames.mp4'))
+        if movie_show:
+            plt.show()
+        plt.clf();
+    plt.imshow(E+I)
+    plt.xlabel('space')
+    plt.ylabel('time')
+    plt_dir.savefig('spacetime.png')
+    if spacetime_show:
+        plt.show()
