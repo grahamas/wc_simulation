@@ -29,9 +29,10 @@ import functools
 
 import sys
 sys.path.append("..")
-from plotting import LinesMovieFromSepPops, PlotDirectory
+from plotting import LinesMovieFromSepPops, ResultInfo, ResultPlots
+from analysis import TimeSpace
 
-# json tools
+#region json helpers
 def read_jsonfile(filename):
     """Reads jsonfile of name filename and returns contents as dict."""
     with open(filename, 'r') as f:
@@ -73,7 +74,9 @@ def get_neuman_params_from_json(json_filename):
     params['r'] = [1,1]
     print('WARNING: Using Neuman equations without refraction.')
     return params
+#endregion
 
+#region calculate weight matrices
 def calculate_weight_matrix(dx, N, w, s):
     """
         Calculates a weight matrix for the case of 1D WC with
@@ -109,7 +112,9 @@ def calculate_connectivity_mx(*args):
     return np.concatenate(
         [np.concatenate(row, axis=1) for row in mx_list],
         axis=0)
+#endregion
 
+#region mathematical helper functions (sigmoid, awgn)
 def awgn(arr, *, snr):
     """Add Gaussian white noise to arr."""
     return arr + np.sqrt(np.power(10.0, -snr/10)) * np.random.randn(*arr.shape)
@@ -117,15 +122,19 @@ def awgn(arr, *, snr):
 def sigmoid(x, a, theta):
     """Standard two-parameter sigmoid."""
     return 1 / (1 + np.exp(-a * (x - theta)))
+
 def sigmoid_norm(x, a, theta):
     """Sigmoid translated so that S(0) = 0"""
     return sigmoid(x,a,theta) - sigmoid(0,a,theta)
+
 def sigmoid_norm_rectify(x,*, a, theta):
     """Sigmoid normed as above and rectified so S(x) = 0 for all x <= 0"""
     return np.maximum(0, sigmoid_norm(x, a, theta))
+
 def sigmoid_rectify(x,*, a, theta):
     """Sigmoid rectified so S(x) = 0 for all x < 0"""
     return np.maximum(0, sigmoid(x,a,theta))
+#endregion
 
 def central_window(total_len, window_width):
     """
@@ -226,13 +235,13 @@ def interactive_widget_neuman(widget_module, json_filename):
                 noise_SNRE=(75,115,1),noise_SNRI=(75,115,1),
                 mean_background_inputE=(0,2,0.1), mean_background_inputI=(0,2,0.1))
 
-def euler_generator(dt, n_time, y0, F):
+def euler_generator(f, dt, n_time, y0):
     """
         Integrates a differential equation, F, starting at time 0 and
         initial state y0 for n_time steps of increment dt.
 
-        NOTE: The equation F must take the state of the previous time
-        step and the current INDEX.
+        NOTE: The equation f must take the state of the previous time
+        step and the current time.
 
         Uses Euler's method.
 
@@ -240,11 +249,46 @@ def euler_generator(dt, n_time, y0, F):
     """
     y = y0
     for i_time in range(n_time):
-        time = dt * i_time
-        y = y + dt*F(y,time)
+        time = dt * i_time # TODO: Fix this.
+        y = y + dt*f(time,y)
         yield(y, time)
+def ode45_step(f, x, t, dt, *args):
+    """
+    One step of 4th Order Runge-Kutta method
+    """
+    k = dt
+    k1 = k * f(t, x, *args)
+    k2 = k * f(t + 0.5*k, x + 0.5*k1, *args)
+    k3 = k * f(t + 0.5*k, x + 0.5*k2, *args)
+    k4 = k * f(t + dt, x + k3, *args)
+    return x + 1/6. * (k1 + k2 + k3 + k4)
+def ode45_generator(f, dt, n_time, y0, *args):
+    """
+    4th order Runge-Kutta method
+    """
+    y = y0
+    for i_time in range(n_time):
+        time = dt * i_time # TODO: Fix this.
+        y = ode45_step(f, y, time, dt, *args)
+        yield(y, time)
+# def ode45(f, t, x0, *args):
+#     """
+#     4th Order Runge-Kutta method
+#     """
+#     n = len(t)
+#     x = np.zeros((n, len(x0)))
+#     x[0] = x0
+#     for i in range(n-1):
+#         dt = t[i+1] - t[i]
+#         x[i+1] = ode45_step(f, x[i], t[i], dt, *args)
+#     return x
+SOLVERS = {
+    'ode45': ode45_generator,
+    'euler': euler_generator
+}
+
 def makefn_neuman_implementation(*, space, time, stimulus, s, beta, alpha, r,
-    theta, a, w, tau, noise_SNR, mean_background_input):
+    theta, a, w, tau, noise_SNR, mean_background_input, noiseless=False):
     """
         Returns a function that implements the Wilson-Cowan equations
         as parametrized in Neuman 2015.
@@ -272,7 +316,10 @@ def makefn_neuman_implementation(*, space, time, stimulus, s, beta, alpha, r,
                                         a=fn_expand_param_in_space(a),
                                         theta=fn_expand_param_in_space(theta))
     fn_noise = functools.partial(awgn, snr=fn_expand_param_in_space(noise_SNR))
-    fn_nonlinearity = lambda x: fn_sigmoid(fn_noise(x))
+    if not noiseless:
+        fn_nonlinearity = lambda x: fn_sigmoid(fn_noise(x))
+    else:
+        fn_nonlinearity = lambda x: fn_sigmoid(x)
 
     input_duration, input_strength, input_width = stimulus
     input_slice = central_window(n_space, input_width)
@@ -281,14 +328,14 @@ def makefn_neuman_implementation(*, space, time, stimulus, s, beta, alpha, r,
     one_pop_stim[input_slice] = one_pop_stim[input_slice] + input_strength
     stimulus_input = fn_expand_param_in_population(one_pop_stim)
 
-    def fn_input(time):
-        if time <= input_duration*dt:
+    def fn_input(t):
+        if t <= input_duration*dt:
             return stimulus_input
         else:
             return blank_input
 
-    def neuman_implementation(activity, time):
-        vr_stimulus = fn_input(time)
+    def neuman_implementation(t, activity):
+        vr_stimulus = fn_input(t)
         return (-vr_alpha * activity + (1 - activity) * vr_beta\
             * fn_nonlinearity(mx_connectivity @ activity
                 + vr_current + vr_stimulus)) / vr_time_constant
@@ -300,49 +347,83 @@ def simulate_neuman(*, space, time, **params):
         parametrization and Euler's method (also as in Neuman 2015).
     """
     n_populations = 2
-    n_space, dx = space
-    n_time, dt = time
+    max_space, dx = space
+    max_time, dt = time
+    n_space = int(max_space / dx)
+    n_time = int(max_time / dt)
+    space = [n_space, dx]
+    time = [n_time, dt]
+
+    input_duration, input_strength, input_width = params['stimulus']
+    input_duration = int(input_duration // dt)
+    input_width = int(input_width // dx)
+    params['stimulus'] = [input_duration, input_strength, input_width]
 
     activity = np.zeros((n_time, n_populations, n_space))
     y0 = np.concatenate((np.zeros(n_space), np.zeros(n_space)), axis=0)
 
+    solver_name = params.pop('solver')
+    generator = SOLVERS[solver_name]
+
     fn_wilson_cowan = makefn_neuman_implementation(space=space, time=time,
         **params)
 
+    print('starting simulation...')
     i_time = 0
-    for y, time in euler_generator(dt, n_time, y0, fn_wilson_cowan):
+    for y, time in generator(fn_wilson_cowan, dt, n_time, y0):
         activity[i_time,:,:] = y.reshape((n_populations, n_space))
         i_time += 1
+    print('simulation done.')
 
     return activity
 
-@load_json_with(get_neuman_params_from_json, pass_name=False)
-def make_simulation_movie(params, run_name, modifications=None,
-    movie_show=True, spacetime_show=True, skip_movies=False):
+@load_json_with(get_neuman_params_from_json, pass_name=True)
+def run_simulation(params, run_name, modifications=None, show_figs=False,
+    movie_show=None, timespace_show=None, skip_movies=False):
     """
-        Make a movie of the simulation resulting from simulate_neuman.
+        Run the simulation resulting from simulate_neuman, and
+        save results.
     """
-    n_space, dx = params["space"]
+    if movie_show is None:
+        movie_show = show_figs
+    if timespace_show is None:
+        timespace_show = show_figs
     if modifications:
         for key, value in modifications.items():
             params[key] = value
+
     activity = simulate_neuman(**params)
     E = activity[:,0,:]
     I = activity[:,1,:]
-    plt_dir = PlotDirectory(run_name, params)
+    result_info = ResultInfo(run_name, params)
+    result_plots = ResultPlots(result_info, show=show_figs)
     plt.clf()
     if not skip_movies:
-        LinesMovieFromSepPops([E, I, E+I],
-                save_to=plt_dir.pathify('activity_movie.mp4'))
-        LinesMovieFromSepPops(
-                [np.transpose(E), np.transpose(I), np.transpose(E+I)],
-                save_to=plt_dir.pathify('activity_space_frames.mp4'))
-        if movie_show:
-            plt.show()
-        plt.clf();
-    plt.imshow(E+I)
-    plt.xlabel('space')
-    plt.ylabel('time')
-    plt_dir.savefig('spacetime.png')
-    if spacetime_show:
-        plt.show()
+        result_plots.movie(movie_class=LinesMovieFromSepPops,
+                lines_data=[E, I, E+I],
+                save_to='activity_movie.mp4',
+                xlabel='space (a.u.)', ylabel='amplitude (a.u.)',
+                title='1D Wilson-Cowan Simulation', clear=(not movie_show))
+        result_plots.movie(movie_class=LinesMovieFromSepPops,
+                data=[np.transpose(E), np.transpose(I), np.transpose(E+I)],
+                save_to='activity_space_frames.mp4',
+                xlabel='time (a.u.)', ylabel='amplitude (a.u.)',
+                title='1D Wilson-Cowan Simulation', clear=(not movie_show))
+    result_plots.imshow(E, xlabel='space (a.u.)', ylabel='time (a.u.)',
+        title='Heatmap of E activity', save_to='E_timespace.png',
+        clear=(not timespace_show))
+    timespace_E = TimeSpace(E)
+    bump_properties = timespace_E.clooge_bump_properties()
+    peak_ix = bump_properties.pop('peak_ix')
+    width = bump_properties.pop('width')
+    amplitude = bump_properties.pop('amplitude')
+    result_plots.multiline_plot([amplitude], ['amplitude'], xlabel='time (a.u.)',
+        ylabel='(a.u., various)', title='Properties of moving bump',
+        save_to='cloogy_bump_amp.png')
+    result_plots.multiline_plot_from_dict(bump_properties, xlabel='time (a.u.)',
+        ylabel='(a.u., various)', title='Properties of moving bump',
+        save_to='cloogy_bump_vel.png')
+    result_plots.multiline_plot([width], ['width'], xlabel='time (a.u.)',
+        ylabel='(a.u., various)', title='Width of moving bump',
+        save_to='cloogy_bump_width.png')
+    result_info.save_data(data=bump_properties, filename='bump_properties.pkl')
