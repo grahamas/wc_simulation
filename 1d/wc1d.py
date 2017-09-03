@@ -83,30 +83,17 @@ def calculate_weight_matrix(dx, N, w, s):
         # The division by 2*s normalizes the beta,
         # to separate the scaling w from the space constant s
     return weight_mx
-def calculate_weight_matrices(dx, n_space, W, S):
-    """
-        Given N x N matrix of population interaction weights (and sigmas),
-        this calculates the convolution matrix for each, returning
-        an NxN matrix of n_space x n_space convolution matrices.
-    """
-    l_weights = []
-    for dx1 in range(len(S)):
-        row = []
-        for dx2 in range(len(S[0])):
-            row += [calculate_weight_matrix(dx, n_space, W[dx1][dx2],
-                                                S[dx1][dx2])]
-        l_weights += [row]
-    return l_weights
-def calculate_connectivity_mx(*args):
-    """
-        This concatenates the list of matrices returned by
-        calculate_weight_matrices.
-    """
-    # TODO: remove intermediate "calculate_weight_matrices"
-    mx_list = calculate_weight_matrices(*args)
-    return np.concatenate(
-        [np.concatenate(row, axis=1) for row in mx_list],
-        axis=0)
+def calculate_connectivity_mx(dx, n_space, W, S):
+    n_pops = len(W)
+    connectivity_mx = np.empty((n_pops*n_space,n_pops*n_space))
+    for pop_pair in itertools.product(range(n_pops), range(n_pops)):
+        to_pop = pop_pair[0]
+        from_pop = pop_pair[1]
+        connectivity_mx[mh.stride(to_pop,n_space),
+            mh.stride(from_pop,n_space)] = calculate_weight_matrix(
+                dx, n_space, W[to_pop][from_pop], S[to_pop][from_pop])
+
+    return connectivity_mx
 #endregion
 
 def makefn_neuman_implementation(*, space, time, stimulus, nonlinearity, s,
