@@ -27,11 +27,17 @@ import scipy
 import itertools
 import functools
 
+import logging as log
+
+# Enable local imports from parent directory
 import sys
 sys.path.append("..")
+
+# Local imports
 from plotting import LinesMovieFromSepPops, ResultInfo, ResultPlots
 from analysis import TimeSpace
 import math_helpers as mh
+import ode
 
 #region json helpers
 def read_jsonfile(filename):
@@ -67,7 +73,7 @@ def get_neuman_params_from_json(json_filename):
     params = read_jsonfile(json_filename)
     run_name = os.path.splitext(json_filename)[0]
     params['r'] = [1,1]
-    print('WARNING: Using Neuman equations without refraction.')
+    log.warn('WARNING: Using Neuman equations without refraction.')
     return params
 #endregion
 
@@ -106,6 +112,7 @@ def makefn_neuman_implementation(*, space, time, stimulus, nonlinearity, s,
         current time index as arguments, returning the dy/dt at the
         current time index.
     """
+    log.info("Making function...")
     n_space, dx = space
     n_time, dt = time
     n_population = len(tau)
@@ -118,20 +125,24 @@ def makefn_neuman_implementation(*, space, time, stimulus, nonlinearity, s,
     #vr_refraction = np.array(r)
     vr_alpha = fn_expand_param_in_space(alpha)
     vr_beta = fn_expand_param_in_space(beta)
+    log.info('Calculating connectivity...')
     mx_connectivity = calculate_connectivity_mx(dx, n_space, w, s)
+    log.info('done.')
     vr_current = fn_expand_param_in_space(mean_background_input)
 
-    fn_nonlinearity = mh.NONLINEARITIES[nonlinearity['name']]
+    log.info("Making nonlinearity...")
+    fn_nonlinearity = mh.dct_nonlinearities[nonlinearity['name']]
     dct_nl_args = {k: fn_expand_param_in_space(v)
         for k, v in nonlinearity['args'].items()}
     fn_transfer = functools.partial(fn_nonlinearity, **dct_nl_args)
     fn_noise = functools.partial(mh.awgn,
         snr=fn_expand_param_in_space(noise_SNR))
     if not noiseless:
-        fn_nonlinearity = lambda x: fn_sigmoid(fn_noise(x))
+        fn_nonlinearity = lambda x: fn_transfer(fn_noise(x))
     else:
-        fn_nonlinearity = lambda x: fn_sigmoid(x)
+        fn_nonlinearity = lambda x: fn_transfer(x)
 
+    log.info("Making input...")
     input_duration, input_strength, input_width = stimulus
     input_slice = mh.central_window(n_space, input_width)
     blank_input = fn_expand_param_in_population(np.zeros(n_space))
@@ -150,13 +161,14 @@ def makefn_neuman_implementation(*, space, time, stimulus, nonlinearity, s,
         return (-vr_alpha * activity + (1 - activity) * vr_beta\
             * fn_nonlinearity(mx_connectivity @ activity
                 + vr_current + vr_stimulus)) / vr_time_constant
-
+    log.info("Returning function.")
     return neuman_implementation
 def simulate_neuman(*, space, time, **params):
     """
         Simulates the Wilson-Cowan equation using Neuman's 2015
         parametrization and Euler's method (also as in Neuman 2015).
     """
+    log.info("In simulation function.")
     n_populations = 2
     max_space, dx = space
     max_time, dt = time
@@ -170,21 +182,28 @@ def simulate_neuman(*, space, time, **params):
     input_width = int(input_width // dx)
     params['stimulus'] = [input_duration, input_strength, input_width]
 
-    activity = np.zeros((n_time, n_populations, n_space))
+    output_shape = (n_time+1, n_populations, n_space)
+    activity = np.zeros(output_shape)
     y0 = np.concatenate((np.zeros(n_space), np.zeros(n_space)), axis=0)
 
-    solver_name = params.pop('solver')
-    generator = SOLVERS[solver_name]
+    dct_solver = params.pop('solver')
+    # TODO: generalize solvers/generators
 
     fn_wilson_cowan = makefn_neuman_implementation(space=space, time=time,
         **params)
 
-    print('starting simulation...')
-    i_time = 0
-    for y, time in generator(fn_wilson_cowan, dt, n_time, y0):
-        activity[i_time,:,:] = y.reshape((n_populations, n_space))
-        i_time += 1
-    print('simulation done.')
+    log.info('starting simulation...')
+    fn_reshape = lambda x: x.reshape(n_populations, n_space)
+    solver_name = dct_solver["name"]
+    if "generator" in dct_solver and dct_solver["generator"]:
+        generator = ode.dct_generators[solver_name]
+        activity = ode.generator_solve(generator, fn_wilson_cowan,
+            dt, n_time, y0).reshape(output_shape)
+    else:
+        solver = ode.dct_solvers[solver_name]
+        activity = solver(fn_wilson_cowan, dt, n_time, y0)\
+            .reshape(output_shape)
+    log.info('simulation done.')
 
     return activity
 
