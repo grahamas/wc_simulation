@@ -27,7 +27,8 @@ class ResultInfo(object):
             raise Exception('"Uniquely" named folder already exists.')
         os.mkdir(self._dir_path)
         self.save_data(data=params, filename='params.json',
-            mode='w', save_fn=json.dump)
+            mode='w', save_fn=lambda data, file: json.dump(data, file,
+                sort_keys=True, indent=4))
 
     def save_data(self, *, data, filename, mode='wb', save_fn=pickle.dump):
         with open(self.pathify(filename), mode) as file:
@@ -87,13 +88,15 @@ class ResultPlots(object):
 
 class Movie(object):
     def __init__(self, *, run=True, save_to='',
-            xlabel, ylabel, title, show=False, clear=False):
+            xlabel, ylabel, title, show=False, clear=False,
+            subsample=1):
         self.fig, self.ax = plt.subplots()
         plt.xlabel(xlabel); plt.ylabel(ylabel)
         plt.title(title)
         self._run = run
         self._save_to = save_to
         self._clear = clear
+        self._subsample = subsample
 
     def run(self):
         self.animation = animation.FuncAnimation(self.fig, self.anim_update,
@@ -133,12 +136,14 @@ class WC1DMovie(Movie):
 class LinesMovieFromSepPops(Movie):
     def __init__(self, *, lines_data, **kwargs):
         super().__init__(**kwargs)
-        self.data = data
-        self.n_time, self.n_space = self.data[0].shape
+        # Remember, this subsampling makes a VIEW so don't change the data itself.
+        self.lines_data = [data[::self._subsample] for data in lines_data]
+        self.n_time, self.n_space = self.lines_data[0].shape
         self.x_space = np.linspace(-1, 1, self.n_space)
-        assert all([(self.n_time, self.n_space) == matrix.shape for matrix in self.data])
+        assert all([(self.n_time, self.n_space) == matrix.shape
+            for matrix in self.lines_data])
         self.lines = tuple(plt.plot([], [], animated=True)[0]
-            for matrix in self.matrices)
+            for matrix in self.lines_data)
         # The below lines should be moved up to super init, but
         # I'm not sure the self.lines line can be called before self.fig
         if self._run:
@@ -147,8 +152,8 @@ class LinesMovieFromSepPops(Movie):
             self.save(self._save_to)
 
     def anim_init(self):
-        y_max = max(map(np.max, self.matrices))
-        y_min = min(map(np.min, self.matrices))
+        y_max = max(map(np.max, self.lines_data))
+        y_min = min(map(np.min, self.lines_data))
         x_max = 1
         x_min = -1
         self.ax.set_xlim(x_min, x_max)
@@ -158,7 +163,7 @@ class LinesMovieFromSepPops(Movie):
         return self.lines
 
     def anim_update(self, i_frame):
-        for line, matrix in zip(self.lines, self.matrices):
+        for line, matrix in zip(self.lines, self.lines_data):
             line.set_data(self.x_space, matrix[i_frame,:])
         return self.lines
 

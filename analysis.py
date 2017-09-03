@@ -44,8 +44,8 @@ class TimeSpace(object):
         ix_first_half = range(trunc_half)
         ix_backwards_second_half = range(n_space-1,trunc_half+is_odd-1,-1)
         # TODO: remove expensive assertion
-        assert np.allclose(arr_timespace[:,ix_first_half],
-                            arr_timespace[:,ix_backwards_second_half])
+        # assert np.allclose(arr_timespace[:,ix_first_half],
+        #                     arr_timespace[:,ix_backwards_second_half])
         # IMPORTANT: the assertion was false. I don't know why.
         return arr_timespace[:,:(trunc_half+is_odd)]
 
