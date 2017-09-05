@@ -15,10 +15,11 @@
 #   Inhibitory sigmoid function is translated to S(0) = 0
 
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-import matplotlib
-matplotlib.verbose.set_level("helpful")
+#matplotlib.verbose.set_level("helpful")
 import json
 import time
 import os
@@ -28,16 +29,17 @@ import itertools
 import functools
 
 import logging as log
+log.basicConfig(level=log.INFO)
 
 # Enable local imports from parent directory
 import sys
 sys.path.append("..")
 
 # Local imports
-from plotting import LinesMovieFromSepPops, ResultInfo, ResultPlots
-from analysis import TimeSpace
-import math_helpers as mh
-import ode
+from plot import LinesMovieFromSepPops, ResultInfo, ResultPlots
+from analyse import TimeSpace
+import math_aux as math
+import integrate
 
 #region json helpers
 def read_jsonfile(filename):
@@ -69,8 +71,8 @@ def load_json_with(loader, pass_name=False):
                 return func(*args, **kwargs)
         return wrapper
     return decorator
-def get_neuman_params_from_json(json_filename):
-    params = read_jsonfile(json_filename)
+def get_neuman_params_from_json(json_filename, params_dir='params'):
+    params = read_jsonfile(os.path.join(params_dir,json_filename))
     run_name = os.path.splitext(json_filename)[0]
     params['r'] = [1,1]
     log.warn('WARNING: Using Neuman equations without refraction.')
@@ -95,8 +97,8 @@ def calculate_connectivity_mx(dx, n_space, W, S):
     for pop_pair in itertools.product(range(n_pops), range(n_pops)):
         to_pop = pop_pair[0]
         from_pop = pop_pair[1]
-        connectivity_mx[mh.stride(to_pop,n_space),
-            mh.stride(from_pop,n_space)] = calculate_weight_matrix(
+        connectivity_mx[math.stride(to_pop,n_space),
+            math.stride(from_pop,n_space)] = calculate_weight_matrix(
                 dx, n_space, W[to_pop][from_pop], S[to_pop][from_pop])
 
     return connectivity_mx
@@ -131,11 +133,11 @@ def makefn_neuman_implementation(*, space, time, stimulus, nonlinearity, s,
     vr_current = fn_expand_param_in_space(mean_background_input)
 
     log.info("Making nonlinearity...")
-    fn_nonlinearity = mh.dct_nonlinearities[nonlinearity['name']]
+    fn_nonlinearity = math.dct_nonlinearities[nonlinearity['name']]
     dct_nl_args = {k: fn_expand_param_in_space(v)
         for k, v in nonlinearity['args'].items()}
     fn_transfer = functools.partial(fn_nonlinearity, **dct_nl_args)
-    fn_noise = functools.partial(mh.awgn,
+    fn_noise = functools.partial(math.awgn,
         snr=fn_expand_param_in_space(noise_SNR))
     if not noiseless:
         fn_nonlinearity = lambda x: fn_transfer(fn_noise(x))
@@ -144,7 +146,7 @@ def makefn_neuman_implementation(*, space, time, stimulus, nonlinearity, s,
 
     log.info("Making input...")
     input_duration, input_strength, input_width = stimulus
-    input_slice = mh.central_window(n_space, input_width)
+    input_slice = math.central_window(n_space, input_width)
     blank_input = fn_expand_param_in_population(np.zeros(n_space))
     one_pop_stim =  np.zeros(n_space)
     one_pop_stim[input_slice] = one_pop_stim[input_slice] + input_strength
@@ -196,11 +198,11 @@ def simulate_neuman(*, space, time, **params):
     fn_reshape = lambda x: x.reshape(n_populations, n_space)
     solver_name = dct_solver["name"]
     if "generator" in dct_solver and dct_solver["generator"]:
-        generator = ode.dct_generators[solver_name]
-        activity = ode.generator_solve(generator, fn_wilson_cowan,
+        generator = integrate.dct_generators[solver_name]
+        activity = integrate.generator_solve(generator, fn_wilson_cowan,
             dt, n_time, y0).reshape(output_shape)
     else:
-        solver = ode.dct_solvers[solver_name]
+        solver = integrate.dct_integrators[solver_name]
         activity = solver(fn_wilson_cowan, dt, n_time, y0)\
             .reshape(output_shape)
     log.info('simulation done.')

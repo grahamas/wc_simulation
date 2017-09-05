@@ -12,7 +12,7 @@ Functions for the analysis of 1D data.
 import numpy as np
 
 from scipy.signal import argrelmax, argrelmin
-from cached_property import cached_property
+#from cached_property import cached_property
 
 import matplotlib.pyplot as plt
 
