@@ -1,4 +1,4 @@
-import diffeq
+import runner
 import traceback
 
 dt = 1e-4
@@ -7,17 +7,20 @@ subsample = int(effective_rate / dt)
 if subsample is 0:
     subsample = 1
 
-# try:
-diffeq.run_simulation("replicate_neuman.json",
-    {
-        "stimulus": [0.15, 1.2, 3.5],
-        "noiseless": True,
-        "space": [100.5, 0.5],
-        "time": [1, dt],
-        "solver": {
+runner.run_simulation(json_file_name="replicate_neuman.json",
+        # Simulation parameters here
+        stimulus = [0.15, 1.2, 3.5],
+        noiseless= True,
+        space = {"length": 100.5, "step": 0.5},
+        time = {"length": 2.81, "step": dt},
+        solver = {
             "name": "euler"
-            }
-    }, analysis=False, show_figs=False,
-    movie_params={
+            },
+        # Post-simulation parameters here
+        analysis=False,
+        show_figs=False,
+        movie_params={
             "subsample": subsample
-        })
+        }
+    )
+

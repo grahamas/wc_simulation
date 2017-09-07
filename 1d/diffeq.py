@@ -32,7 +32,10 @@ sys.path.append("..")
 import math_aux as math
 import integrate
 
-def makefn_wilsoncowan73(*, space, time, stimulus, nonlinearity, s,
+def makefn_beurle(*, lattice):
+    pass
+
+def makefn_wilsoncowan73(*, lattice, stimulus, nonlinearity, s,
     beta, alpha, r, w, tau, noise_SNR, mean_background_input, noiseless=False):
     """
         Returns a function that implements the Wilson-Cowan equations

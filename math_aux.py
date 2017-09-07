@@ -7,6 +7,7 @@
 #   2 Aug 2017  Begin
 
 import numpy as np
+import itertools
 
 def stride(stride_num, stride_length):
     '''
@@ -46,33 +47,33 @@ dct_nonlinearities = {
 #endregion
 
 #region calculate weight matrices
-def exponential_decay_1d_convolution_mx(dx, Nx, amplitude, spread):
+def exponential_decay_1d_convolution_mx(step, length, amplitude, spread):
     """
         Calculates a weight matrix for the case of 1D WC with
         exponentially decaying spatial connectivity.
     """
-    conv_mx = np.zeros((Nx, Nx))
-    for i in range(Nx):
-        conv_mx[i, :] = spread *
+    conv_mx = np.zeros((length, length))
+    for i in range(length):
+        conv_mx[i, :] = amplitude *\
             np.exp(
                 -np.abs(
-                    dx * (np.arange(Nx)-i)
+                    step * (np.arange(length)-i)
                     ) / spread
-                ) *
-            dx/(2*spread)
+                ) *\
+            step/(2*spread)
         # The division by 2*spread normalizes the beta,
         # to separate the scaling amplitude from the space constant spread
     return conv_mx
-def sholl_1d_connectivity_mx(dx, n_space, weights, spreads):
+def sholl_1d_connectivity_mx(step, length, weights, spreads):
     n_pops = len(weights)
-    connectivity_mx = np.empty((n_pops*n_space,n_pops*n_space))
+    connectivity_mx = np.empty((n_pops*length,n_pops*length))
     for pop_pair in itertools.product(range(n_pops), range(n_pops)):
         to_pop = pop_pair[0]
         from_pop = pop_pair[1]
-        connectivity_mx[math.stride(to_pop,n_space),
-            math.stride(from_pop,n_space)] =
+        connectivity_mx[stride(to_pop,length),
+            stride(from_pop,length)] =\
                 exponential_decay_1d_convolution_mx(
-                    dx, n_space, weights[to_pop][from_pop],
+                    step, length, weights[to_pop][from_pop],
                     spreads[to_pop][from_pop]
                 )
 
