@@ -85,6 +85,9 @@ class ResultPlots(object):
             kwargs['save_to'] = self.info.pathify(kwargs['save_to'])
         movie_obj = movie_class(**kwargs)
 
+    def close_figs(self):
+        plt.close('all')
+
 
 class Movie(object):
     def __init__(self, *, run=True, save_to='',

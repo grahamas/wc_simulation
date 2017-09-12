@@ -211,11 +211,14 @@ def simulate_neuman(*, space, time, **params):
 
 @load_json_with(get_neuman_params_from_json, pass_name=True)
 def run_simulation(params, run_name, modifications=None, show_figs=False,
-    movie_params=None, timespace_show=None, analysis=True):
+    movie_params=None, timespace_show=None, analysis=False):
     """
         Run the simulation resulting from simulate_neuman, and
         save results.
     """
+    if 'my_run_name' in modifications:
+        run_name = modifications.pop('my_run_name')
+
     if timespace_show is None:
         timespace_show = show_figs
     if modifications:
@@ -258,3 +261,4 @@ def run_simulation(params, run_name, modifications=None, show_figs=False,
             ylabel='(a.u., various)', title='Width of moving bump',
             save_to='cloogy_bump_width.png')
         result_info.save_data(data=bump_properties, filename='bump_properties.pkl')
+        result_plots.close_figs()
