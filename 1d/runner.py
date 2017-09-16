@@ -44,41 +44,33 @@ def simulate(*, lattice, solver, factory, **params):
     return activity
 
 @load_args_from_file
-def run_simulation(*, figure_params, analysis_params,
-    #modifications=None, show_figs=False,
-    #movie_params=None, show_timespace=None, do_analysis=False,
+def run_simulation(*, run_name, figure_params, analysis_params,
     **model_params):
     """
         Run the simulation resulting from simulate_neuman, and
         save results.
     """
-    if show_timespace is None:
-        show_timespace = show_figs
-    if modifications:
-        for key, value in modifications.items():
-            params[key] = value
 
     params['lattice'] =\
         Lattice1D(**inner_dcts_pop(params, ['space', 'time', 'populations']))
 
-    activity = simulate(factory=)
+    activity = simulate(**model_params)
     #activity = simulate_neuman(**params)
     E = activity[:,0,:]
     I = activity[:,1,:]
     result_info = ResultInfo(run_name, params)
     result_plots = ResultPlots(result_info, show=show_figs)
     plt.clf()
-    if movie_params:
+    if movie_params in figure_params:
         result_plots.movie(movie_class=LinesMovieFromSepPops,
                 lines_data=[E, I, E+I],
                 save_to='activity_movie.mp4',
                 xlabel='space (a.u.)', ylabel='amplitude (a.u.)',
                 title='1D Wilson-Cowan Simulation', **movie_params)
     result_plots.imshow(E, xlabel='space (a.u.)', ylabel='time (a.u.)',
-        title='Heatmap of E activity', save_to='E_timespace.png',
-        clear=(not show_timespace))
-    timespace_E = TimeSpace(E)
+        title='Heatmap of E activity', save_to='E_timespace.png')
     if do_analysis:
+        timespace_E = TimeSpace(E)
         bump_properties = timespace_E.clooge_bump_properties()
         peak_ix = bump_properties.pop('peak_ix')
         width = bump_properties.pop('width')
