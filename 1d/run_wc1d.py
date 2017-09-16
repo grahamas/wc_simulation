@@ -17,10 +17,15 @@ runner.run_simulation(json_file_name="replicate_neuman.json",
             "name": "euler"
             },
         # Post-simulation parameters here
-        analysis=False,
-        show_figs=False,
-        movie_params={
-            "subsample": subsample
+        analysis_params = {
+         "do_analysis": False
+        },
+        figure_params = {
+            "show": False,
+            "movie_params": {
+                "show": False
+                "subsample": subsample
+            }
         }
     )
 
