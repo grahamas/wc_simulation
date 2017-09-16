@@ -39,3 +39,35 @@ def load_args_from_file(loader=read_json_file):
     return decorator
 
 #endregion
+
+
+def add_dcts (dct1, dct2):
+    return {**dct1, **dct2}
+
+def multikey(dct, l_keys):
+    return [d[key] for key in l_keys]
+def inner_dcts(dct, l_keys):
+    '''
+        Extracts and combines dictionaries inside dct keyed by l_keys
+
+        Args:
+            l_keys: list of keys
+        Returns:
+            Dictionary containing union of all dictionaries of the form
+            dct[key] for key in l_keys.
+    '''
+    return reduce(add_dcts, multikey(dct, l_keys))
+
+def multikey_pop(dct, l_keys):
+    return [d.pop(key) for key in l_keys]
+def inner_dcts_pop(dct, l_keys):
+    '''
+        Extracts and combines dictionaries inside dct keyed by l_keys
+
+        Args:
+            l_keys: list of keys
+        Returns:
+            Dictionary containing union of all dictionaries of the form
+            dct[key] for key in l_keys.
+    '''
+    return reduce(add_dcts, multikey(dct, l_keys))

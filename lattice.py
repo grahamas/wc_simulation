@@ -7,68 +7,93 @@
 #   2017 Sep 6  Begin
 #
 
+import pandas
+
 class Lattice(object):
-    def __init__(self, *, d_n_points=None, d_lattices=None):
-        if d_lattices:
-            self._d_lattices = d_lattices
-        elif d_n_points:
-            self._d_lattices = {}
-            for key, value in d_n_points.items():
-                if isinstance(value, dict):
-                    try:
-                        #TODO: This has the (as written) unfixable bug
-                        # in the case where two dimensions are named
-                        # delta and length
-                        self._d_lattices[key] = Lattice1D(**value)
-                    except TypeError:
-                        self._d_lattices[key] = Lattice(d_n_points=value)
-                elif isinstance(value, int):
-                    self._d_lattices[key] = Lattice1(n_points=value)
-        else:
-            raise ValueError('Lattice only takes one of two arguments.')
-    def __getitem__(self, key):
-        return self._d_lattices[key]
-
-class Lattice0(Lattice):
-    '''
-        A zero-dimensional lattice (i.e. a point).
-        Really it's a set, but that's already a class and I don't want
-        to have my larger lattice be heterogenous.
-    '''
-    def __init__(self, *, n_points):
-        self.n_points = n_points
-
-class Lattice1(Lattice):
-    '''
-        A latice in one dimension, but without dimension.
-    '''
-    def __init__(self, *, n_points):
-        self.n_points = n_points
-    def central_window(self, window_width):
-        """
-            Calculate indices for a region of width window_width roughly in the
-            center of an array of length total_len.
-        """
-        median_dx = self.n_points // 2
-        half_width = window_width // 2
-        assert half_width < median_dx
-        if window_width % 2: # is odd
-            window_slice = slice(median_dx - half_width, median_dx + half_width + 1)
-        else:
-            window_slice = slice(median_dx - half_width, median_dx + half_width)
-        assert len(window_slice) == window_width
-        return window_slice
-
-class Lattice1D(Lattice1):
-    '''
-        Contains space or time variables for ease of access.
-    '''
-    def __init__(self, *, step, length):
+    def __init__(self, *, space_extent, space_step,
+        time_extent, time_step,
+        n_populations, population_names):
         '''
-            Arguments are dimensional.
-
-            Step is dx, end the mesh's length.
+            Args:
+                space_extent    : Dimensional size of space dimension
+                space_step      : Step size of space, i.e. dx
+                time_extent     : Dimensional size of time dimension
+                time_step       : Step size of time, i.e. dt
+                n_populations   : Number of neural populations
+                population_names: Names of populations
+            Returns:
+                Lattice of size space_extent x time_extent x n_populations
         '''
-        self.step = step
-        self.length = length
-        super.__init__(n_points=int(self.length / self.step))
+        self.space_extent = space_extent
+        self.space_step = space_step
+        self.time_extent = time_extent
+        self.time_step = time_step
+        self.n_populations = n_populations
+        self.n_space = non_dimensionalize(space_extent, space_step)
+        self.n_time = non_dimensionalize(time_extent, time_step)
+        self.population_names = population_names
+        self.shape = (self.n_time, self.n_populations, self.n_space)
+    def non_dimensionalize(self, extent, step):
+        '''
+            Translates from dimensional terms to non-dimensional array size
+
+            Args:
+                extent: Dimensioned length
+                step: Dimensioned step size
+            Returns:
+                Number of points to represent extent with step stepsize
+        '''
+        return int(extent / step)
+    def space_frame(self):
+        return np.empty((self.n_space * self.n_populations,))
+    @cached_property
+    def array(self):
+        # It's possible caching this is worse than the if statement?
+        # But so clean.
+        self._array = np.empty((self.n_time, self.n_space, self.n_populations))
+        return self._array
+
+
+# class Lattice0(Lattice):
+#     '''
+#         A zero-dimensional lattice (i.e. a point).
+#         Really it's a set, but that's already a class and I don't want
+#         to have my larger lattice be heterogenous.
+#     '''
+#     def __init__(self, *, n_points):
+#         self.n_points = n_points
+
+# class Lattice1(Lattice):
+#     '''
+#         A latice in one dimension, but without dimension.
+#     '''
+#     def __init__(self, *, n_points):
+#         self.n_points = n_points
+#     def central_window(self, window_width):
+#         """
+#             Calculate indices for a region of width window_width roughly in the
+#             center of an array of length total_len.
+#         """
+#         median_dx = self.n_points // 2
+#         half_width = window_width // 2
+#         assert half_width < median_dx
+#         if window_width % 2: # is odd
+#             window_slice = slice(median_dx - half_width, median_dx + half_width + 1)
+#         else:
+#             window_slice = slice(median_dx - half_width, median_dx + half_width)
+#         assert len(window_slice) == window_width
+#         return window_slice
+
+# class Lattice1D(Lattice1):
+#     '''
+#         Contains space or time variables for ease of access.
+#     '''
+#     def __init__(self, *, step, length):
+#         '''
+#             Arguments are dimensional.
+
+#             Step is dx, end the mesh's length.
+#         '''
+#         self.step = step
+#         self.length = length
+#         super.__init__(n_points=int(self.length / self.step))

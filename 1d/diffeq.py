@@ -32,10 +32,10 @@ sys.path.append("..")
 import math_aux as math
 import integrate
 
-def makefn_beurle(*, lattice):
+def beurle_mkfn(*, lattice):
     pass
 
-def makefn_wilsoncowan73(*, lattice, stimulus, nonlinearity, s,
+def wilsoncowan73_mkfn(*, lattice, stimulus, nonlinearity, s,
     beta, alpha, r, w, tau, noise_SNR, mean_background_input, noiseless=False):
     """
         Returns a function that implements the Wilson-Cowan equations
@@ -86,45 +86,10 @@ def makefn_wilsoncowan73(*, lattice, stimulus, nonlinearity, s,
                 + vr_current + vr_stimulus)) / vr_time_constant
     log.info("Returning function.")
     return wilsoncowan73
-def simulate_neuman(*, space, time, **params):
-    """
-        Simulates the Wilson-Cowan equation using Neuman's 2015
-        parametrization and Euler's method (also as in Neuman 2015).
-    """
-    log.info("In simulation function.")
-    n_populations = 2
-    max_space, dx = space
-    max_time, dt = time
-    n_space = int(max_space / dx)
-    n_time = int(max_time / dt)
-    space = [n_space, dx]
-    time = [n_time, dt]
 
-    input_duration, input_strength, input_width = params['stimulus']
-    params['stimulus'] = [input_duration, input_strength, input_width]
+factories_dn = {
+    'wilsoncowan73': wilsoncowan73_mkfn,
+    'beurle': beurle_mkfn
+}
 
-    output_shape = (n_time+1, n_populations, n_space)
-    activity = np.zeros(output_shape)
-    y0 = np.concatenate((np.zeros(n_space), np.zeros(n_space)), axis=0)
-
-    dct_solver = params.pop('solver')
-    # TODO: generalize solvers/generators
-
-    fn_wilson_cowan = makefn_neuman_implementation(space=space, time=time,
-        **params)
-
-    log.info('starting simulation...')
-    fn_reshape = lambda x: x.reshape(n_populations, n_space)
-    solver_name = dct_solver["name"]
-    if "generator" in dct_solver and dct_solver["generator"]:
-        generator = integrate.dct_generators[solver_name]
-        activity = integrate.generator_solve(generator, fn_wilson_cowan,
-            dt, n_time, y0).reshape(output_shape)
-    else:
-        solver = integrate.dct_integrators[solver_name]
-        activity = solver(fn_wilson_cowan, dt, n_time, y0)\
-            .reshape(output_shape)
-    log.info('simulation done.')
-
-    return activity
 

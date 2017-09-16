@@ -17,11 +17,37 @@ sys.path.append("..")
 # Local imports
 from plot import LinesMovieFromSepPops, ResultInfo, ResultPlots
 from analyse import TimeSpace
-from args import load_args_from_file
+from args import load_args_from_file, inner_dcts
+from lattice import Lattice1D
+from diffeq import factories_dn
+
+def simulate(*, lattice, solver, factory, **params):
+    """
+        Simulates the a differential equation made from a given factory.
+    """
+    log.info("In simulation function.")
+
+    factory_fn = factories_dn[factory]
+    diffeq_fn = factory_fn(lattice=lattice, **params)
+
+    log.info('starting simulation...')
+    initial_value = lattice.space_frame()
+    dt = lattice.time_step()
+    n_time = lattice.n_time
+    fn_reshape = lambda x: x.reshape(n_populations, n_space)
+    solver_fn = integrate.dct_integrators[solver["name"]]
+    activity = solver_fn(diffeq_fn, simulation_step, simulation_length,
+        initial_value)\
+        .reshape(lattice.shape)
+    log.info('simulation done.')
+
+    return activity
 
 @load_args_from_file
-def run_simulation(modifications=None, show_figs=False,
-    movie_params=None, show_timespace=None, do_analysis=False, **model_params):
+def run_simulation(*, figure_params, analysis_params,
+    #modifications=None, show_figs=False,
+    #movie_params=None, show_timespace=None, do_analysis=False,
+    **model_params):
     """
         Run the simulation resulting from simulate_neuman, and
         save results.
@@ -32,7 +58,11 @@ def run_simulation(modifications=None, show_figs=False,
         for key, value in modifications.items():
             params[key] = value
 
-    activity = simulate_neuman(**params)
+    params['lattice'] =\
+        Lattice1D(**inner_dcts_pop(params, ['space', 'time', 'populations']))
+
+    activity = simulate(factory=)
+    #activity = simulate_neuman(**params)
     E = activity[:,0,:]
     I = activity[:,1,:]
     result_info = ResultInfo(run_name, params)
