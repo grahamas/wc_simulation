@@ -14,25 +14,119 @@ import numpy as np
 from scipy.signal import argrelmax, argrelmin
 #from cached_property import cached_property
 
-import matplotlib.pyplot as plt
+import os
+import json
+import time
+import pickle
 
-def shift_op(arr, *, op, axis, shift=1):
-    '''
-        Computes binary operation op on pairs of elements separated by
-        shift along axis of arr.
-    '''
-    n_dims = len(arr.shape)
-    left = ([slice(None)] * n_dims)
-    left[axis] = range(len(arr)-shift)
-    right = ([slice(None)] * n_dims)
-    right[axis] = range(shift,len(arr))
-    return op(arr[left], arr[right])
+# Enable local imports from parent directory
+import sys
+sys.path.append("..")
 
-def shift_subtract(arr, *, axis):
-    return shift_op(arr, op=np.subtract, axis=axis)
+from plot import Plots
+import math_aux as math
 
-def shift_multiply(arr, *, axis):
-    return shift_op(arr, op=np.multiply, axis=axis)
+def one_pop_analysis(*, data, results_struct):
+    rs = results_struct
+    plots = rs.plots
+    result_plots.clear()
+    if len(plots.movie_params) > 0:
+        plots.movie(movie_class=plots.LinesMovieFromSepPops,
+                lines_data=[activity],
+                save_to='activity_movie.mp4',
+                xlabel='space (a.u.)', ylabel='amplitude (a.u.)',
+                title='1D Wilson-Cowan Simulation', **movie_params)
+    plots.imshow(activity, xlabel='space (a.u.)', ylabel='time (a.u.)',
+        title='Heatmap of activity', save_to='E_timespace.png')
+    timespace_E = TimeSpace(E)
+    bump_properties = timespace_E.clooge_bump_properties()
+    peak_ix = bump_properties.pop('peak_ix')
+    width = bump_properties.pop('width')
+    amplitude = bump_properties.pop('amplitude')
+    plots.multiline_plot([amplitude], ['amplitude'], xlabel='time (a.u.)',
+        ylabel='(a.u., various)', title='Properties of moving bump',
+        save_to='cloogy_bump_amp.png')
+    plots.multiline_plot_from_dict(bump_properties, xlabel='time (a.u.)',
+        ylabel='(a.u., various)', title='Properties of moving bump',
+        save_to='cloogy_bump_vel.png')
+    plots.multiline_plot([width], ['width'], xlabel='time (a.u.)',
+        ylabel='(a.u., various)', title='Width of moving bump',
+        save_to='cloogy_bump_width.png')
+    rs.save_data(data=bump_properties, filename='bump_properties.pkl')
+
+def e_i_analysis(*, data, results_struct):
+    rs = results_struct
+    plots = rs.plots
+    E = data[:,0,:]
+    I = data[:,1,:]
+    plots.clear()
+    if len(plots.movie_params) > 0:
+        plots.movie(movie_class=LinesMovieFromSepPops,
+                lines_data=[E, I, E+I],
+                save_to='activity_movie.mp4',
+                xlabel='space (a.u.)', ylabel='amplitude (a.u.)',
+                title='1D Wilson-Cowan Simulation')
+    plots.imshow(E, xlabel='space (a.u.)', ylabel='time (a.u.)',
+        title='Heatmap of E activity', save_to='E_timespace.png')
+    timespace_E = TimeSpace(E)
+    bump_properties = timespace_E.clooge_bump_properties()
+    peak_ix = bump_properties.pop('peak_ix')
+    width = bump_properties.pop('width')
+    amplitude = bump_properties.pop('amplitude')
+    plots.multiline_plot([amplitude], ['amplitude'], xlabel='time (a.u.)',
+        ylabel='(a.u., various)', title='Properties of moving bump',
+        save_to='cloogy_bump_amp.png')
+    plots.multiline_plot_from_dict(bump_properties, xlabel='time (a.u.)',
+        ylabel='(a.u., various)', title='Properties of moving bump',
+        save_to='cloogy_bump_vel.png')
+    plots.multiline_plot([width], ['width'], xlabel='time (a.u.)',
+        ylabel='(a.u., various)', title='Width of moving bump',
+        save_to='cloogy_bump_width.png')
+    rs.save_data(data=bump_properties, filename='bump_properties.pkl')
+
+class Results(object):
+    # TODO: Bad, redo this.
+    analysis_fn_dct = {
+            'e_i': e_i_analysis,
+            'one_pop': one_pop_analysis
+            }
+
+    def __init__(self, *, data, run_name, model_params, sep='_', root='plots',
+            movie_params={}, figure_params={}, analyses_dct={}):
+        self.data = data
+        self._run_name = run_name
+        self._init_time = time.strftime("%Y%m%d{}%H%M%S".format(sep))
+        self.model_params = model_params
+        self.init_save(root, sep)
+        self.analyses_dct = analyses_dct
+        lattice = model_params['lattice']
+        # TODO: rewrite plotting to use lattice  
+        self.dx, self.space_max = lattice['space_step'], lattice['space_extent']
+        self.dt, self.time_max = lattice['time_step'], lattice['time_extent']
+        self.plots = Plots(results=self, **figure_params)
+
+    def init_save(self, root, sep):
+        dir_name = self._init_time + sep + self._run_name
+        self._dir_path = os.path.join(root, dir_name)
+        if os.path.exists(self._dir_path):
+            raise Exception('"Uniquely" named folder already exists.')
+        os.mkdir(self._dir_path)
+        self.save_data(data=self.model_params, filename='params.json',
+            mode='w', save_fn=lambda data, file: json.dump(data, file,
+                sort_keys=True, indent=4))
+
+
+    def save_data(self, *, data, filename, mode='wb', save_fn=pickle.dump):
+        with open(self.pathify(filename), mode) as file:
+            save_fn(data, file)
+
+    def pathify(self, name, subdir=''):
+        return os.path.join(self._dir_path, subdir, name)
+
+    def analyse(self):
+        for analysis_name, analysis_params in self.analyses_dct.items():
+            self.analysis_fn_dct[analysis_name](data=self.data, 
+                    results_struct=self, **analysis_params)        
 
 class TimeSpace(object):
     ''' Called TimeSpace because Time is the first dimension. '''
@@ -83,7 +177,7 @@ class TimeSpace(object):
         # Then similarly cut the already calculated amplitudes
         amplitude = space_maxes[ix_time_with_max:]
         # Find the change in amplitude through time
-        delta_amplitudes = shift_subtract(amplitude, axis=0)
+        delta_amplitudes = math.shift_subtract(amplitude, axis=0)
         # When this amplitude stops changing, say the bump is dead
         # More properly we would say "when the amplitude is close to zero,"
         # but there is a certain resting activity.
@@ -92,7 +186,7 @@ class TimeSpace(object):
         # Calculate the locations of the peak
         peak_ix = np.argmax(timespace, axis=1)
         # Calculate the velocity in terms of d index/d frame
-        velocity = shift_subtract(peak_ix, axis=0)
+        velocity = math.shift_subtract(peak_ix, axis=0)
         # Calculate the widths
         space_indices = np.tile(range(n_space), (n_time, 1))
         peak_ix_expanded = np.tile(peak_ix[...,np.newaxis],

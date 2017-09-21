@@ -52,5 +52,5 @@ def pyode45(f, dt, n_time, y0, *args):
 
 dct_integrators = {
     'euler': euler,
-    'pyode45': pyode45
+    'ode45': pyode45
 }

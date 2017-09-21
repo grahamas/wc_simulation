@@ -5,48 +5,25 @@
 #   8 May 2017  Begin, copied from wc1d
 #
 
-import time, os
-import json
-import pickle
+import os
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 import numpy as np
 
-class ResultInfo(object):
-
-    def __init__(self, name, params, sep='_', root='plots'):
-        self._base_name = name
-        self._init_time = time.strftime("%Y%m%d{}%H%M%S".format(sep))
-        self.dx, self.space_max = params['space']
-        self.dt, self.time_max = params['time']
-        dir_name = self._init_time + sep + name
-        self._dir_path = os.path.join(root, dir_name)
-        if os.path.exists(self._dir_path):
-            raise Exception('"Uniquely" named folder already exists.')
-        os.mkdir(self._dir_path)
-        self.save_data(data=params, filename='params.json',
-            mode='w', save_fn=lambda data, file: json.dump(data, file,
-                sort_keys=True, indent=4))
-
-    def save_data(self, *, data, filename, mode='wb', save_fn=pickle.dump):
-        with open(self.pathify(filename), mode) as file:
-            save_fn(data, file)
-
-    def pathify(self, name, subdir=''):
-        return os.path.join(self._dir_path, subdir, name)
-
-
-class ResultPlots(object):
-    def __init__(self, result_info, show=False):
-        self.info = result_info
+class Plots(object):
+    def __init__(self, results, show=False, movie_params={}):
+        self.results = results
         self.show = show
-        self.space_max = self.info.space_max
-        self.time_max = self.info.time_max
+        self.space_max = self.results.space_max
+        self.time_max = self.results.time_max
+        self.movie_params = movie_params
 
     def savefig(self, name, subdir=''):
-        plt.savefig(self.info.pathify(name, subdir))
+        plt.savefig(self.results.pathify(name, subdir))
 
     def post_plot(self, *, xlabel, ylabel, title, save_to=None,
         subdir='', show=None, clear=True):
@@ -82,8 +59,11 @@ class ResultPlots(object):
 
     def movie(self, movie_class, **kwargs):
         if 'save_to' in kwargs:
-            kwargs['save_to'] = self.info.pathify(kwargs['save_to'])
-        movie_obj = movie_class(**kwargs)
+            kwargs['save_to'] = self.results.pathify(kwargs['save_to'])
+        movie_obj = movie_class(**kwargs, **self.movie_params)
+
+    def clear(self):
+        plt.clf()
 
 
 class Movie(object):

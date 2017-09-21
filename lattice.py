@@ -7,7 +7,9 @@
 #   2017 Sep 6  Begin
 #
 
-import pandas
+import numpy as np
+
+from cached_property import cached_property
 
 class Lattice(object):
     def __init__(self, *, space_extent, space_step,
@@ -29,11 +31,13 @@ class Lattice(object):
         self.time_extent = time_extent
         self.time_step = time_step
         self.n_populations = n_populations
-        self.n_space = non_dimensionalize(space_extent, space_step)
-        self.n_time = non_dimensionalize(time_extent, time_step)
+        self.n_space = self.nondimensionalize(space_extent, space_step)
+        assert isinstance(self.n_space, int)
+        self.n_time = self.nondimensionalize(time_extent, time_step)
         self.population_names = population_names
         self.shape = (self.n_time, self.n_populations, self.n_space)
-    def non_dimensionalize(self, extent, step):
+        self.sim_shape = (self.n_time+1, self.n_populations, self.n_space)
+    def nondimensionalize(self, extent, step):
         '''
             Translates from dimensional terms to non-dimensional array size
 
@@ -52,6 +56,35 @@ class Lattice(object):
         # But so clean.
         self._array = np.empty((self.n_time, self.n_space, self.n_populations))
         return self._array
+    def expand_in_space(self, vec):
+        return np.repeat(vec, self.n_space)
+    def expand_in_population(self, vec):
+        return np.tile(vec, self.n_populations)
+    def central_window(self, width):
+        """
+            Calculate indices for a region of width window_width roughly in the
+            center of an array of length total_len.
+
+            window_width is DIMENSIONED
+        """
+        n_width = self.nondimensionalize(width, self.space_step)
+        median_dx = int(self.n_space // 2)
+        half_width = int(n_width // 2)
+        assert half_width < median_dx
+        if n_width % 2: # is odd
+            window_slice = slice(median_dx - half_width, median_dx + half_width + 1)
+        else:
+            window_slice = slice(median_dx - half_width, median_dx + half_width)
+        return window_slice
+
+# class Lattice1D(Lattice1):
+#     '''
+#         Contains space or time variables for ease of access.
+#     '''
+#     def __init__(self, *, step, length):
+#         '''
+#             Arguments are dimensional.
+
 
 
 # class Lattice0(Lattice):

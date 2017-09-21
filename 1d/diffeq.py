@@ -31,9 +31,30 @@ sys.path.append("..")
 # Local imports
 import math_aux as math
 import integrate
+from stimulus import stimulus_mkfn
 
-def beurle_mkfn(*, lattice):
-    pass
+def beurle_mkfn(*, lattice, stimulus, m):
+    """
+        Returns a function that implements the second-order ODE found in
+        Beurle, 1956 for the proportion of sensitive cells in a population.
+
+        Specifically: R_tt = m R R_t - R_t
+        is transformed into the first order system
+        x_2' = m x_1 x_2 - x_2
+        x_1' = x_2
+
+        Where x_1' = x_2 = F is the quantity we relate to the WC equations,
+        namely the rate at which cells become sensitive, which is, according
+        to Beurle, the negative of the rate at which cells become active.
+    """
+    # TODO: incoporate stimulus
+
+    def beurle56(t, activity):
+        new_activity = np.array([activity[1], 
+            m * activity[0] * activity[1] - activity[1]])
+        return new_activity
+    return beurle56
+
 
 def wilsoncowan73_mkfn(*, lattice, stimulus, nonlinearity, s,
     beta, alpha, r, w, tau, noise_SNR, mean_background_input, noiseless=False):
@@ -46,20 +67,21 @@ def wilsoncowan73_mkfn(*, lattice, stimulus, nonlinearity, s,
         current time index.
     """
     log.info("Making function...")
-    n_space, dx = space
-    n_time, dt = time
-    n_population = len(tau)
+    n_space, dx = lattice.n_space, lattice.space_step
+    n_time, dt = lattice.n_time, lattice.time_step
+    n_population = lattice.n_populations
+    # TODO: native use of lattice
 
     fn_expand_param_in_space = lambda x: np.repeat(x, n_space)
     fn_expand_param_in_population = lambda x: np.tile(x, n_population)
 
     vr_time_constant = fn_expand_param_in_space(tau)
-    #vr_decay = np.array(alpha)
-    #vr_refraction = np.array(r)
     vr_alpha = fn_expand_param_in_space(alpha)
     vr_beta = fn_expand_param_in_space(beta)
+    log.warn('wilsoncowan73 refraction ignored; r=1 assumed.')
     log.info('Calculating connectivity...')
-    mx_connectivity = calculate_connectivity_mx(dx, n_space, w, s)
+    mx_connectivity = \
+            math.sholl_1d_connectivity_mx(lattice, w, s)
     log.info('done.')
     vr_current = fn_expand_param_in_space(mean_background_input)
 
@@ -76,11 +98,10 @@ def wilsoncowan73_mkfn(*, lattice, stimulus, nonlinearity, s,
         fn_nonlinearity = lambda x: fn_transfer(x)
 
     log.info("Making input...")
-    input_duration, input_strength, input_width = stimulus
-
+    fn_forcing = stimulus_mkfn(lattice=lattice, **stimulus)
 
     def wilsoncowan73(t, activity):
-        vr_stimulus = fn_input(t)
+        vr_stimulus = fn_forcing(t)
         return (-vr_alpha * activity + (1 - activity) * vr_beta\
             * fn_nonlinearity(mx_connectivity @ activity
                 + vr_current + vr_stimulus)) / vr_time_constant

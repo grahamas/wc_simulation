@@ -47,35 +47,55 @@ dct_nonlinearities = {
 #endregion
 
 #region calculate weight matrices
-def exponential_decay_1d_convolution_mx(step, length, amplitude, spread):
+def _exponential_decay_1d_convolution_mx(step, n_extent, amplitude, spread):
     """
         Calculates a weight matrix for the case of 1D WC with
         exponentially decaying spatial connectivity.
     """
-    conv_mx = np.zeros((length, length))
-    for i in range(length):
+    conv_mx = np.zeros((n_extent, n_extent))
+    for i in range(n_extent):
         conv_mx[i, :] = amplitude *\
             np.exp(
                 -np.abs(
-                    step * (np.arange(length)-i)
+                    step * (np.arange(n_extent)-i)
                     ) / spread
                 ) *\
             step/(2*spread)
         # The division by 2*spread normalizes the beta,
         # to separate the scaling amplitude from the space constant spread
     return conv_mx
-def sholl_1d_connectivity_mx(step, length, weights, spreads):
-    n_pops = len(weights)
-    connectivity_mx = np.empty((n_pops*length,n_pops*length))
+def sholl_1d_connectivity_mx(lattice, weights, spreads):
+    n_pops = lattice.n_populations
+    assert n_pops == len(weights)
+    n_extent, step = lattice.n_space, lattice.space_step
+    connectivity_mx = np.empty((n_pops*n_extent,n_pops*n_extent))
     for pop_pair in itertools.product(range(n_pops), range(n_pops)):
         to_pop = pop_pair[0]
         from_pop = pop_pair[1]
-        connectivity_mx[stride(to_pop,length),
-            stride(from_pop,length)] =\
-                exponential_decay_1d_convolution_mx(
-                    step, length, weights[to_pop][from_pop],
+        connectivity_mx[stride(to_pop,n_extent),
+            stride(from_pop,n_extent)] =\
+                _exponential_decay_1d_convolution_mx(
+                    step, n_extent, weights[to_pop][from_pop],
                     spreads[to_pop][from_pop]
                 )
 
     return connectivity_mx
 #endregion
+
+def shift_op(arr, *, op, axis, shift=1):
+    '''
+        Computes binary operation op on pairs of elements separated by
+        shift along axis of arr.
+    '''
+    n_dims = len(arr.shape)
+    left = ([slice(None)] * n_dims)
+    left[axis] = range(len(arr)-shift)
+    right = ([slice(None)] * n_dims)
+    right[axis] = range(shift,len(arr))
+    return op(arr[left], arr[right])
+
+def shift_subtract(arr, *, axis):
+    return shift_op(arr, op=np.subtract, axis=axis)
+
+def shift_multiply(arr, *, axis):
+    return shift_op(arr, op=np.multiply, axis=axis)

@@ -7,20 +7,12 @@ subsample = int(effective_rate / dt)
 if subsample is 0:
     subsample = 1
 
-runner.run_simulation(json_file_name="replicate_neuman.json",
+runner.run_simulation(json_file_name="beurle.json",
         json_dir = 'params',
-        run_name = "restructure_test",
+        run_name = 'beurle_test',
         # Simulation parameters here
         model_modifications = {
-            'stimulus': {
-                'name': 'square_pulse',
-                'args': {
-                    'duration': 0.15,
-                    'strength': 1.2,
-                    'width': 3.5
-                    }
-                },
-            'noiseless': True,
+            'stimulus': None,
             'lattice': {
                 'space_extent': 100.5, 'space_step': 0.5,
                 'time_extent': 2.81, 'time_step': dt,
@@ -33,15 +25,15 @@ runner.run_simulation(json_file_name="replicate_neuman.json",
         # Post-simulation parameters here
         results_params = {
             'analyses_dct': {
-                    "e_i": {}
-                },
+                "one_pop": {}
+            },
             'figure_params': {
-                "show": False
-                },
+                "show": False,
+            },
             'movie_params': {
-               "show": False,
+                "show": False,
                 "subsample": subsample
-                }
             }
+        }
     )
 
