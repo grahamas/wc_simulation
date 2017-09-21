@@ -9,25 +9,25 @@ if subsample is 0:
 
 runner.run_simulation(json_file_name="replicate_neuman.json",
         json_dir = 'params',
-        run_name = "restructure_test",
+        run_name = "replicate_longstim_test",
         # Simulation parameters here
         model_modifications = {
             'stimulus': {
                 'name': 'square_pulse',
                 'args': {
-                    'duration': 0.15,
-                    'strength': 1.2,
-                    'width': 3.5
+                    'duration': 4,
+                    'strength': 2,
+                    'width': 1
                     }
                 },
             'noiseless': True,
             'lattice': {
                 'space_extent': 100.5, 'space_step': 0.5,
-                'time_extent': 2.81, 'time_step': dt,
+                'time_extent': 1, 'time_step': dt,
                 'n_populations': 2, 'population_names': ['E', 'I']
                 },
             'solver': {
-                "name": "euler"
+                "name": "ode45"
                 }
             },
         # Post-simulation parameters here

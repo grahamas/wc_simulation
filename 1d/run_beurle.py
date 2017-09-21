@@ -7,9 +7,9 @@ subsample = int(effective_rate / dt)
 if subsample is 0:
     subsample = 1
 
-runner.run_simulation(json_file_name="beurle.json",
+runner.run_simulation(json_file_name="faux_beurle.json",
         json_dir = 'params',
-        run_name = 'beurle_test',
+        run_name = 'faux_beurle_test',
         # Simulation parameters here
         model_modifications = {
             'stimulus': None,

@@ -61,6 +61,8 @@ class Plots(object):
         if 'save_to' in kwargs:
             kwargs['save_to'] = self.results.pathify(kwargs['save_to'])
         movie_obj = movie_class(**kwargs, **self.movie_params)
+        movie_obj.run()
+        movie_obj.save()
 
     def clear(self):
         plt.clf()
