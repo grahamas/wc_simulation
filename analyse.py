@@ -9,6 +9,9 @@ Versions:
 Functions for the analysis of 1D data.
 """
 
+import logging as log
+log.basicConfig(level=log.DEBUG)
+
 import numpy as np
 
 from scipy.signal import argrelmax, argrelmin
@@ -30,7 +33,9 @@ def one_pop_analysis(*, data, results_struct):
     rs = results_struct
     plots = rs.plots
     result_plots.clear()
+    print('Plotting movie?')
     if len(plots.movie_params) > 0:
+        print('Plotting movie.')
         plots.movie(movie_class=plots.LinesMovieFromSepPops,
                 lines_data=[activity],
                 save_to='activity_movie.mp4',
@@ -60,8 +65,10 @@ def e_i_analysis(*, data, results_struct):
     E = data[:,0,:]
     I = data[:,1,:]
     plots.clear()
+    log.info("Plotting EI movie?")
     if len(plots.movie_params) > 0:
-        plots.movie(movie_class=LinesMovieFromSepPops,
+        log.info("... yes.")
+        plots.movie(movie_type="multi_line",
                 lines_data=[E, I, E+I],
                 save_to='activity_movie.mp4',
                 xlabel='space (a.u.)', ylabel='amplitude (a.u.)',
@@ -92,7 +99,7 @@ class Results(object):
             }
 
     def __init__(self, *, data, run_name, model_params, sep='_', root='plots',
-            movie_params={}, figure_params={}, analyses_dct={}):
+            figure_params={}, analyses_dct={}):
         self.data = data
         self._run_name = run_name
         self._init_time = time.strftime("%Y%m%d{}%H%M%S".format(sep))
@@ -124,6 +131,7 @@ class Results(object):
         return os.path.join(self._dir_path, subdir, name)
 
     def analyse(self):
+        log.info('Analysing...')
         for analysis_name, analysis_params in self.analyses_dct.items():
             self.analysis_fn_dct[analysis_name](data=self.data, 
                     results_struct=self, **analysis_params)        

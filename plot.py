@@ -57,7 +57,8 @@ class Plots(object):
             extent=[0, self.space_max, 0, self.time_max])
         self.post_plot(**kwargs)
 
-    def movie(self, movie_class, **kwargs):
+    def movie(self,*, movie_type, **kwargs):
+        movie_class = movie_classes_dct[movie_type]
         if 'save_to' in kwargs:
             kwargs['save_to'] = self.results.pathify(kwargs['save_to'])
         movie_obj = movie_class(**kwargs, **self.movie_params)
@@ -85,11 +86,13 @@ class Movie(object):
             np.arange(self.n_time), init_func=self.anim_init,
             interval=25, blit=True)
 
-    def save(self, file_name):
+    def save(self):
         if self.animation is None:
             raise Exception("Trying to save animation before running it!")
-        print(file_name)
-        self.animation.save(file_name)
+        if self._save_to is None:
+            raise Exception("Trying to save without destination!")
+        print(self._save_to)
+        self.animation.save(self._save_to)
         if self._clear:
             plt.clf()
 
@@ -131,7 +134,7 @@ class LinesMovieFromSepPops(Movie):
         if self._run:
             self.run()
         if self._save_to:
-            self.save(self._save_to)
+            self.save()
 
     def anim_init(self):
         y_max = max(map(np.max, self.lines_data))
@@ -148,4 +151,8 @@ class LinesMovieFromSepPops(Movie):
         for line, matrix in zip(self.lines, self.lines_data):
             line.set_data(self.x_space, matrix[i_frame,:])
         return self.lines
+
+movie_classes_dct = {
+        "multi_line": LinesMovieFromSepPops
+        }
 

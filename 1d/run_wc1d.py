@@ -9,17 +9,24 @@ if subsample is 0:
 
 runner.run_simulation(json_file_name="replicate_neuman.json",
         json_dir = 'params',
-        run_name = "replicate_longstim_test",
+        run_name = "reversed_thresholds_test",
         # Simulation parameters here
         model_modifications = {
             'stimulus': {
                 'name': 'square_pulse',
                 'args': {
-                    'duration': 4,
+                    'duration': 1,
                     'strength': 2,
                     'width': 1
                     }
                 },
+            "nonlinearity": {
+                "name": "sigmoid_norm_rectify",
+                "args": {
+                    "a": [1.2, 1.0],
+                    "theta": [2.6, 8.0]
+                    }
+            },
             'noiseless': True,
             'lattice': {
                 'space_extent': 100.5, 'space_step': 0.5,
@@ -36,11 +43,11 @@ runner.run_simulation(json_file_name="replicate_neuman.json",
                     "e_i": {}
                 },
             'figure_params': {
-                "show": False
-                },
-            'movie_params': {
-               "show": False,
-                "subsample": subsample
+                "show": False,
+                'movie_params': {
+                    "show": False,
+                    "subsample": subsample
+                    }
                 }
             }
     )
