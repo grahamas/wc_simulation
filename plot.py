@@ -5,48 +5,25 @@
 #   8 May 2017  Begin, copied from wc1d
 #
 
-import time, os
-import json
-import pickle
+import os
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 import numpy as np
 
-class ResultInfo(object):
-
-    def __init__(self, name, params, sep='_', root='plots'):
-        self._base_name = name
-        self._init_time = time.strftime("%Y%m%d{}%H%M%S".format(sep))
-        self.dx, self.space_max = params['space']
-        self.dt, self.time_max = params['time']
-        dir_name = self._init_time + sep + name
-        self._dir_path = os.path.join(root, dir_name)
-        if os.path.exists(self._dir_path):
-            raise Exception('"Uniquely" named folder already exists.')
-        os.mkdir(self._dir_path)
-        self.save_data(data=params, filename='params.json',
-            mode='w', save_fn=lambda data, file: json.dump(data, file,
-                sort_keys=True, indent=4))
-
-    def save_data(self, *, data, filename, mode='wb', save_fn=pickle.dump):
-        with open(self.pathify(filename), mode) as file:
-            save_fn(data, file)
-
-    def pathify(self, name, subdir=''):
-        return os.path.join(self._dir_path, subdir, name)
-
-
-class ResultPlots(object):
-    def __init__(self, result_info, show=False):
-        self.info = result_info
+class Plots(object):
+    def __init__(self, results, show=False, movie_params={}):
+        self.results = results
         self.show = show
-        self.space_max = self.info.space_max
-        self.time_max = self.info.time_max
+        self.space_max = self.results.space_max
+        self.time_max = self.results.time_max
+        self.movie_params = movie_params
 
     def savefig(self, name, subdir=''):
-        plt.savefig(self.info.pathify(name, subdir))
+        plt.savefig(self.results.pathify(name, subdir))
 
     def post_plot(self, *, xlabel, ylabel, title, save_to=None,
         subdir='', show=None, clear=True):
@@ -62,7 +39,7 @@ class ResultPlots(object):
             plt.clf()
 
     def multiline_plot(self, list_arrs, list_names, **kwargs):
-        assert len(list_arrs) == len(list_names)
+        #assert len(list_arrs) == len(list_names)
         for arr in list_arrs:
             plt.plot(arr)
         plt.legend(list_names)
@@ -80,10 +57,16 @@ class ResultPlots(object):
             extent=[0, self.space_max, 0, self.time_max])
         self.post_plot(**kwargs)
 
-    def movie(self, movie_class, **kwargs):
+    def movie(self,*, movie_type, **kwargs):
+        movie_class = movie_classes_dct[movie_type]
         if 'save_to' in kwargs:
-            kwargs['save_to'] = self.info.pathify(kwargs['save_to'])
-        movie_obj = movie_class(**kwargs)
+            kwargs['save_to'] = self.results.pathify(kwargs['save_to'])
+        movie_obj = movie_class(**kwargs, **self.movie_params)
+        movie_obj.run()
+        movie_obj.save()
+
+    def clear(self):
+        plt.clf()
 
     def close_figs(self):
         plt.close('all')
@@ -106,11 +89,13 @@ class Movie(object):
             np.arange(self.n_time), init_func=self.anim_init,
             interval=25, blit=True)
 
-    def save(self, file_name):
+    def save(self):
         if self.animation is None:
             raise Exception("Trying to save animation before running it!")
-        print(file_name)
-        self.animation.save(file_name)
+        if self._save_to is None:
+            raise Exception("Trying to save without destination!")
+        print(self._save_to)
+        self.animation.save(self._save_to)
         if self._clear:
             plt.clf()
 
@@ -136,7 +121,7 @@ class WC1DMovie(Movie):
             yield frame[i_pop,:]
         yield np.sum(frame,axis=1)
 
-class LinesMovieFromSepPops(Movie):
+class LinesMovie(Movie):
     def __init__(self, *, lines_data, **kwargs):
         super().__init__(**kwargs)
         # Remember, this subsampling makes a VIEW so don't change the data itself.
@@ -152,7 +137,7 @@ class LinesMovieFromSepPops(Movie):
         if self._run:
             self.run()
         if self._save_to:
-            self.save(self._save_to)
+            self.save()
 
     def anim_init(self):
         y_max = max(map(np.max, self.lines_data))
@@ -169,4 +154,8 @@ class LinesMovieFromSepPops(Movie):
         for line, matrix in zip(self.lines, self.lines_data):
             line.set_data(self.x_space, matrix[i_frame,:])
         return self.lines
+
+movie_classes_dct = {
+        "lines": LinesMovie
+        }
 

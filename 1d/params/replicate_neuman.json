@@ -1,4 +1,9 @@
 {
+   "lattice": {
+        "space_extent": 100.5, "space_step": 0.5,
+        "time_extent": 2.81, "time_step": 0.01,
+        "n_populations": 2, "population_names": ["E", "I"]
+   },
    "w": [[16.0, -18.2],
        [27.0, -4.0]],
    "s": [[2.5, 2.7],
@@ -6,11 +11,17 @@
    "beta": [1.1, 1.1],
    "tau": [0.1, 0.18],
    "alpha": [1.5, 1.0],
-   "stimulus": [0.15, 1.2, 4.5],
-   "space": [100.5, 0.5],
-   "time": [2.81, 0.01],
+   "stimulus": {
+       "name": "square_pulse",
+       "args": {
+           "duration": 0.15, 
+           "strength": 1.2, 
+           "width": 4.5
+       }
+   },
    "noise_SNR": [100,100],
    "mean_background_input": [0.1, 0.1],
+   "r": [1,1],
    "solver": {
                 "name": "euler"
               },
@@ -20,5 +31,6 @@
         "a": [1.2, 1.0],
         "theta": [2.6, 8.0]
       }
-    }
+    },
+    "equation_name": "wilsoncowan73"
 }

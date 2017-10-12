@@ -1,4 +1,4 @@
-import diffeq
+import runner
 import traceback
 import numpy as np
 
@@ -8,68 +8,50 @@ subsample = int(effective_rate / dt)
 if subsample is 0:
     subsample = 1
 
-# parameters = [
-#     {
-#         'my_run_name': 'neuman',
-#         'w':[[16.0, -18.2],
-#             [27.0, -4.0]]
-#     },
-#     {
-#         'my_run_name': 'neuman_balanced_interaction',
-#         'w':[[16.0,-18.2],
-#             [18.2,-4.0]]
-#     },
-#     {
-#         'my_run_name': 'neuman_flipped_interaction',
-#         'w':[[16.0,-27.0],
-#             [18.2,-4.0]]
-#     },
-#     {
-#         'my_run_name': 'neuman_flipped_selfeffect',
-#         'w':[[4.0, -18.2],
-#             [27.0, -16.0]]
-#     }
-# ]
-
-# neuman_w = np.array({
-#         'my_run_name': 'neuman',
-#         'w':[[16.0, -18.2],
-#             [27.0, -4.0]]
-#     }['w'])
-# parameters = [
-#     {
-#         'my_run_name': 'neuman_scaled_{:.2f}'.format(scale),
-#         'w': (neuman_w * scale).tolist()
-#     } for scale in np.linspace(0.1,2.0,num=5)
-# ]
-
-durations = [4]
-strengths = [0.1, 0.5, 1.2, 2]
-widths = [1, 2, 3.5, 10]
-
-import itertools
-parameters = [
-    {
-        'stimulus': tup,
-        'my_run_name': 'neuman_longstim_dur{:.2f}_str{:.2f}_wid{:.2f}'.format(*tup)
-    } for tup in itertools.product(durations, strengths, widths)
-]
-
-print("Starting loop.")
-for d_params in parameters:
-    print("Running: {}".format(d_params['my_run_name']))
-    diffeq.run_simulation("replicate_neuman.json",
-        {
-            #"stimulus": [0.15, 1.2, 3.5],
-            "noiseless": True,
-            "space": [600.5, 0.5],
-            "time": [7, dt],
-            "solver": {
-                "name": "euler"
+runner.run_simulation(json_file_name="replicate_neuman.json",
+        json_dir = 'params',
+        run_name = "traveling_wave_tests",
+        # Simulation parameters here
+        model_modifications = {
+            'stimulus': {
+                'name': 'square_pulse',
+                'args': {
+                    'duration': 1,
+                    'strength': 2,
+                    'width': 1
+                    }
                 },
-            **d_params
-        }, analysis=False, show_figs=False,
-        movie_params={
-                "subsample": subsample
-            })
-print('done.')
+            "w": [[16.0, -18.2],
+                [27.0, -4.0]],
+            "nonlinearity": {
+                "name": "sigmoid_norm_rectify",
+                "args": {
+                    "a": [1.2, 1.0],
+                    "theta": [2.6, 8.0]
+                    }
+            },
+            'noiseless': True,
+            'lattice': {
+                'space_extent': 400.5, 'space_step': 0.5,
+                'time_extent': 4, 'time_step': dt,
+                'n_populations': 2, 'population_names': ['E', 'I']
+                },
+            'solver': {
+                "name": "ode45"
+                }
+            },
+        # Post-simulation parameters here
+        results_params = {
+            'analyses_dct': {
+                    "e_i": {}
+                },
+            'figure_params': {
+                "show": False,
+                'movie_params': {
+                    "show": False,
+                    "subsample": subsample
+                    }
+                }
+            }
+    )
+

@@ -8,6 +8,7 @@
 #   1 Jul 2017  Successfully replicated Neuman 2015
 #   6 Jul 2017  Abstracted WC implementation to passing function to solver
 #   6 Jul 2017  Made entire calculation matrix ops, no explicit populations
+#   5 Sep 2017  Name changed to diffeq.py (from wc1d.py), split out some fxns
 
 # Differences introduced from (Neuman 2015): NO LONGER TRUE?
 #   Edges of weight matrix are not halved
@@ -15,14 +16,6 @@
 #   Inhibitory sigmoid function is translated to S(0) = 0
 
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-#matplotlib.verbose.set_level("helpful")
-import json
-import time
-import os
 import scipy
 
 import itertools
@@ -36,75 +29,33 @@ import sys
 sys.path.append("..")
 
 # Local imports
-from plot import LinesMovieFromSepPops, ResultInfo, ResultPlots
-from analyse import TimeSpace
 import math_aux as math
 import integrate
+from stimulus import stimulus_mkfn
 
-#region json helpers
-def read_jsonfile(filename):
-    """Reads jsonfile of name filename and returns contents as dict."""
-    with open(filename, 'r') as f:
-        params = json.load(f)
-    return params
-def load_json_with(loader, pass_name=False):
+def beurle_mkfn(*, lattice, stimulus, m):
     """
-        A decorator for functions whose first argument is a dict
-        that could be loaded from a json-file.
+        Returns a function that implements the second-order ODE found in
+        Beurle, 1956 for the proportion of sensitive cells in a population.
 
-        If the first argument is a string rather than a dict, the wrapper
-        tries to load a file with that string name and then pass the
-        loaded dict (along with the filename, optionally) to the
-        wrapped function.
+        Specifically: R_tt = m R R_t - R_t
+        is transformed into the first order system
+        x_2' = m x_1 x_2 - x_2
+        x_1' = x_2
+
+        Where x_1' = x_2 = F is the quantity we relate to the WC equations,
+        namely the rate at which cells become sensitive, which is, according
+        to Beurle, the negative of the rate at which cells become active.
     """
-    def decorator(func=read_jsonfile):
-        def wrapper(*args, **kwargs):
-            if isinstance(args[0], str):
-                loaded = loader(args[0])
-                if pass_name:
-                    run_name = os.path.splitext(args[0])[0]
-                    out_args = [loaded, run_name, *args[1:]]
-                else:
-                    out_args = [loaded, *args[1:]]
-                return func(*out_args, **kwargs)
-            else:
-                return func(*args, **kwargs)
-        return wrapper
-    return decorator
-def get_neuman_params_from_json(json_filename, params_dir='params'):
-    params = read_jsonfile(os.path.join(params_dir,json_filename))
-    run_name = os.path.splitext(json_filename)[0]
-    params['r'] = [1,1]
-    log.warn('WARNING: Using Neuman equations without refraction.')
-    return params
-#endregion
+    # TODO: incoporate stimulus
 
-#region calculate weight matrices
-def calculate_weight_matrix(dx, N, w, s):
-    """
-        Calculates a weight matrix for the case of 1D WC with
-        exponentially decaying spatial connectivity.
-    """
-    weight_mx = np.zeros((N, N))
-    for i in range(N):
-        weight_mx[i, :] = w*np.exp(-np.abs(dx*(np.arange(N)-i))/s)*dx/(2*s)
-        # The division by 2*s normalizes the beta,
-        # to separate the scaling w from the space constant s
-    return weight_mx
-def calculate_connectivity_mx(dx, n_space, W, S):
-    n_pops = len(W)
-    connectivity_mx = np.empty((n_pops*n_space,n_pops*n_space))
-    for pop_pair in itertools.product(range(n_pops), range(n_pops)):
-        to_pop = pop_pair[0]
-        from_pop = pop_pair[1]
-        connectivity_mx[math.stride(to_pop,n_space),
-            math.stride(from_pop,n_space)] = calculate_weight_matrix(
-                dx, n_space, W[to_pop][from_pop], S[to_pop][from_pop])
+    def beurle56(t, activity):
+        new_activity = np.array([activity[1], 
+            m * activity[0] * activity[1] - activity[1]])
+        return new_activity
+    return beurle56
 
-    return connectivity_mx
-#endregion
-
-def makefn_neuman_implementation(*, space, time, stimulus, nonlinearity, s,
+def wilsoncowan73_mkfn(*, lattice, stimulus, nonlinearity, s,
     beta, alpha, r, w, tau, noise_SNR, mean_background_input, noiseless=False):
     """
         Returns a function that implements the Wilson-Cowan equations
@@ -115,20 +66,21 @@ def makefn_neuman_implementation(*, space, time, stimulus, nonlinearity, s,
         current time index.
     """
     log.info("Making function...")
-    n_space, dx = space
-    n_time, dt = time
-    n_population = len(tau)
+    n_space, dx = lattice.n_space, lattice.space_step
+    n_time, dt = lattice.n_time, lattice.time_step
+    n_population = lattice.n_populations
+    # TODO: native use of lattice
 
     fn_expand_param_in_space = lambda x: np.repeat(x, n_space)
     fn_expand_param_in_population = lambda x: np.tile(x, n_population)
 
     vr_time_constant = fn_expand_param_in_space(tau)
-    #vr_decay = np.array(alpha)
-    #vr_refraction = np.array(r)
     vr_alpha = fn_expand_param_in_space(alpha)
     vr_beta = fn_expand_param_in_space(beta)
+    log.warn('wilsoncowan73 refraction ignored; r=1 assumed.')
     log.info('Calculating connectivity...')
-    mx_connectivity = calculate_connectivity_mx(dx, n_space, w, s)
+    mx_connectivity = \
+            math.sholl_1d_connectivity_mx(lattice, w, s)
     log.info('done.')
     vr_current = fn_expand_param_in_space(mean_background_input)
 
@@ -145,120 +97,17 @@ def makefn_neuman_implementation(*, space, time, stimulus, nonlinearity, s,
         fn_nonlinearity = lambda x: fn_transfer(x)
 
     log.info("Making input...")
-    input_duration, input_strength, input_width = stimulus
-    input_slice = math.central_window(n_space, input_width)
-    blank_input = fn_expand_param_in_population(np.zeros(n_space))
-    one_pop_stim =  np.zeros(n_space)
-    one_pop_stim[input_slice] = one_pop_stim[input_slice] + input_strength
-    stimulus_input = fn_expand_param_in_population(one_pop_stim)
+    fn_forcing = stimulus_mkfn(lattice=lattice, **stimulus)
 
-    def fn_input(t):
-        if t <= input_duration*dt:
-            return stimulus_input
-        else:
-            return blank_input
-
-    def neuman_implementation(t, activity):
-        vr_stimulus = fn_input(t)
+    def wilsoncowan73(t, activity):
+        vr_stimulus = fn_forcing(t)
         return (-vr_alpha * activity + (1 - activity) * vr_beta\
             * fn_nonlinearity(mx_connectivity @ activity
                 + vr_current + vr_stimulus)) / vr_time_constant
     log.info("Returning function.")
-    return neuman_implementation
-def simulate_neuman(*, space, time, **params):
-    """
-        Simulates the Wilson-Cowan equation using Neuman's 2015
-        parametrization and Euler's method (also as in Neuman 2015).
-    """
-    log.info("In simulation function.")
-    n_populations = 2
-    max_space, dx = space
-    max_time, dt = time
-    n_space = int(max_space / dx)
-    n_time = int(max_time / dt)
-    space = [n_space, dx]
-    time = [n_time, dt]
+    return wilsoncowan73
 
-    input_duration, input_strength, input_width = params['stimulus']
-    input_duration = int(input_duration // dt)
-    input_width = int(input_width // dx)
-    params['stimulus'] = [input_duration, input_strength, input_width]
-
-    output_shape = (n_time+1, n_populations, n_space)
-    activity = np.zeros(output_shape)
-    y0 = np.concatenate((np.zeros(n_space), np.zeros(n_space)), axis=0)
-
-    dct_solver = params.pop('solver')
-    # TODO: generalize solvers/generators
-
-    fn_wilson_cowan = makefn_neuman_implementation(space=space, time=time,
-        **params)
-
-    log.info('starting simulation...')
-    fn_reshape = lambda x: x.reshape(n_populations, n_space)
-    solver_name = dct_solver["name"]
-    if "generator" in dct_solver and dct_solver["generator"]:
-        generator = integrate.dct_generators[solver_name]
-        activity = integrate.generator_solve(generator, fn_wilson_cowan,
-            dt, n_time, y0).reshape(output_shape)
-    else:
-        solver = integrate.dct_integrators[solver_name]
-        activity = solver(fn_wilson_cowan, dt, n_time, y0)\
-            .reshape(output_shape)
-    log.info('simulation done.')
-
-    return activity
-
-@load_json_with(get_neuman_params_from_json, pass_name=True)
-def run_simulation(params, run_name, modifications=None, show_figs=False,
-    movie_params=None, timespace_show=None, analysis=False):
-    """
-        Run the simulation resulting from simulate_neuman, and
-        save results.
-    """
-    if 'my_run_name' in modifications:
-        run_name = modifications.pop('my_run_name')
-
-    if timespace_show is None:
-        timespace_show = show_figs
-    if modifications:
-        for key, value in modifications.items():
-            params[key] = value
-
-    activity = simulate_neuman(**params)
-    E = activity[:,0,:]
-    I = activity[:,1,:]
-    result_info = ResultInfo(run_name, params)
-    result_plots = ResultPlots(result_info, show=show_figs)
-    plt.clf()
-    if movie_params:
-        result_plots.movie(movie_class=LinesMovieFromSepPops,
-                lines_data=[E, I, E+I],
-                save_to='activity_movie.mp4',
-                xlabel='space (a.u.)', ylabel='amplitude (a.u.)',
-                title='1D Wilson-Cowan Simulation', **movie_params)
-        # result_plots.movie(movie_class=LinesMovieFromSepPops,
-        #         lines_data=[np.transpose(E), np.transpose(I), np.transpose(E+I)],
-        #         save_to='activity_space_frames.mp4',
-        #         xlabel='time (a.u.)', ylabel='amplitude (a.u.)',
-        #         title='1D Wilson-Cowan Simulation', **movie_params)
-    result_plots.imshow(E, xlabel='space (a.u.)', ylabel='time (a.u.)',
-        title='Heatmap of E activity', save_to='E_timespace.png',
-        clear=(not timespace_show))
-    timespace_E = TimeSpace(E)
-    if analysis:
-        bump_properties = timespace_E.clooge_bump_properties()
-        peak_ix = bump_properties.pop('peak_ix')
-        width = bump_properties.pop('width')
-        amplitude = bump_properties.pop('amplitude')
-        result_plots.multiline_plot([amplitude], ['amplitude'], xlabel='time (a.u.)',
-            ylabel='(a.u., various)', title='Properties of moving bump',
-            save_to='cloogy_bump_amp.png')
-        result_plots.multiline_plot_from_dict(bump_properties, xlabel='time (a.u.)',
-            ylabel='(a.u., various)', title='Properties of moving bump',
-            save_to='cloogy_bump_vel.png')
-        result_plots.multiline_plot([width], ['width'], xlabel='time (a.u.)',
-            ylabel='(a.u., various)', title='Width of moving bump',
-            save_to='cloogy_bump_width.png')
-        result_info.save_data(data=bump_properties, filename='bump_properties.pkl')
-        result_plots.close_figs()
+factories_dn = {
+    'wilsoncowan73': wilsoncowan73_mkfn,
+    'beurle': beurle_mkfn
+}

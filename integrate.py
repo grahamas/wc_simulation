@@ -10,15 +10,6 @@
 import numpy as np
 from scipy.integrate import ode
 
-def generator_solve(fn_generator, fn_diff, dt, n_time, y0):
-    output = np.zeros((n_time+1, len(y0)))
-    output[0,:] = y0
-    i_time = 0
-    for y, time in fn_generator(fn_diff, dt, n_time, y0):
-        output[i_time, :] = y
-        i_time += 1
-    return output
-
 def euler_step(f, y, t, dt, *args):
     """
         Single step of Euler's method.
@@ -42,24 +33,6 @@ def euler(f, dt, n_time, y0, *args):
         y[i_time+1] = euler_step(f, y[i_time,:], time, dt, *args)
     return y
 
-def euler_generator(f, dt, n_time, y0, *args):
-    """
-        Integrates a differential equation, F, starting at time 0 and
-        initial state y0 for n_time steps of increment dt.
-
-        NOTE: The equation f must take the state of the previous time
-        step and the current time.
-
-        Uses Euler's method.
-
-        Yields the result at each step (is a generator).
-    """
-    y = y0
-    for i_time in range(n_time):
-        t = dt * i_time # TODO: Fix this.
-        y = euler_step(f, y, t, dt)
-        yield(y, t)
-
 def pyode45(f, dt, n_time, y0, *args):
     step = ode(f)
     step.set_integrator('dopri5')
@@ -70,18 +43,18 @@ def pyode45(f, dt, n_time, y0, *args):
     y[0,:] = y0
     t1 = n_time * dt
     i_time = 1
-    while step.successful() and i_time < n_time+1:
+    while step.successful() and i_time <= n_time:
         step.integrate(step.t + dt)
         y[i_time, :] = step.y
         i_time += 1
-    assert(step.t <= t1 and step.t > t1 - dt*2)
+    try:
+        assert((step.t < t1 or np.isclose(step.t, t1)) and step.t > t1 - dt*2)
+    except AssertionError as e:
+        e.args += ('current t: {}, max_t: {}, min_t: {}'.format(step.t, t1, t1-dt*2),)
+        raise
     return y
-
-dct_generators = {
-    'euler': euler_generator
-}
 
 dct_integrators = {
     'euler': euler,
-    'pyode45': pyode45
+    'ode45': pyode45
 }
