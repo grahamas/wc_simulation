@@ -68,6 +68,9 @@ class Plots(object):
     def clear(self):
         plt.clf()
 
+    def close_figs(self):
+        plt.close('all')
+
 
 class Movie(object):
     def __init__(self, *, run=True, save_to='',

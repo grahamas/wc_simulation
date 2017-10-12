@@ -1,5 +1,6 @@
 import runner
 import traceback
+import numpy as np
 
 dt = 1e-4
 effective_rate = 0.01

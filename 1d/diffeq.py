@@ -111,5 +111,3 @@ factories_dn = {
     'wilsoncowan73': wilsoncowan73_mkfn,
     'beurle': beurle_mkfn
 }
-
-
