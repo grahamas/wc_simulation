@@ -7,20 +7,16 @@ subsample = int(effective_rate / dt)
 if subsample is 0:
     subsample = 1
 
-runner.run_simulation(json_file_name="faux_beurle.json",
+runner.run_simulation(json_file_name="one_pop.json",
         json_dir = 'params',
-        run_name = 'faux_beurle_test',
+        run_name = 'one_pop_test',
         # Simulation parameters here
         model_modifications = {
-            'stimulus': None,
             'lattice': {
                 'space_extent': 100.5, 'space_step': 0.5,
                 'time_extent': 2.81, 'time_step': dt,
-                'n_populations': 2, 'population_names': ['E', 'I']
+                'n_populations': 1, 'population_names': ['E']
                 },
-            'solver': {
-                "name": "euler"
-                }
             },
         # Post-simulation parameters here
         results_params = {
@@ -29,10 +25,10 @@ runner.run_simulation(json_file_name="faux_beurle.json",
             },
             'figure_params': {
                 "show": False,
-            },
-            'movie_params': {
-                "show": False,
-                "subsample": subsample
+                'movie_params': {
+                    "show": False,
+                    "subsample": subsample
+                }
             }
         }
     )

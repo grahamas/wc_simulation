@@ -56,3 +56,4 @@ def run_simulation(*, run_name, results_params,
     results = Results(data=activity, **results_params,
             run_name=run_name, model_params=model_params)
     results.analyse()
+    log.info("All done with {}.".format(run_name))

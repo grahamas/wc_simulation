@@ -32,18 +32,19 @@ import math_aux as math
 def one_pop_analysis(*, data, results_struct):
     rs = results_struct
     plots = rs.plots
-    result_plots.clear()
+    plots.clear()
+    data = data[:,0,:]
     print('Plotting movie?')
     if len(plots.movie_params) > 0:
         print('Plotting movie.')
-        plots.movie(movie_class=plots.LinesMovieFromSepPops,
-                lines_data=[activity],
+        plots.movie(movie_type='lines',
+                lines_data=[data],
                 save_to='activity_movie.mp4',
                 xlabel='space (a.u.)', ylabel='amplitude (a.u.)',
-                title='1D Wilson-Cowan Simulation', **movie_params)
-    plots.imshow(activity, xlabel='space (a.u.)', ylabel='time (a.u.)',
+                title='1D Wilson-Cowan Simulation')
+    plots.imshow(data, xlabel='space (a.u.)', ylabel='time (a.u.)',
         title='Heatmap of activity', save_to='E_timespace.png')
-    timespace_E = TimeSpace(E)
+    timespace_E = TimeSpace(data)
     bump_properties = timespace_E.clooge_bump_properties()
     peak_ix = bump_properties.pop('peak_ix')
     width = bump_properties.pop('width')
@@ -68,7 +69,7 @@ def e_i_analysis(*, data, results_struct):
     log.info("Plotting EI movie?")
     if len(plots.movie_params) > 0:
         log.info("... yes.")
-        plots.movie(movie_type="multi_line",
+        plots.movie(movie_type="lines",
                 lines_data=[E, I, E+I],
                 save_to='activity_movie.mp4',
                 xlabel='space (a.u.)', ylabel='amplitude (a.u.)',
@@ -89,6 +90,11 @@ def e_i_analysis(*, data, results_struct):
     plots.multiline_plot([width], ['width'], xlabel='time (a.u.)',
         ylabel='(a.u., various)', title='Width of moving bump',
         save_to='cloogy_bump_width.png')
+    num_freeze_frames = 10 # TODO
+    freeze_frame_step = E.shape[0] // num_freeze_frames
+    plots.multiline_plot((E+I)[::freeze_frame_step,:], [], xlabel="space (a.u.)",
+            ylabel = 'activity (a.u.)', title='Profile of activity at various time points',
+            save_to='activity_profile.png')
     rs.save_data(data=bump_properties, filename='bump_properties.pkl')
 
 class Results(object):

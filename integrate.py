@@ -47,7 +47,11 @@ def pyode45(f, dt, n_time, y0, *args):
         step.integrate(step.t + dt)
         y[i_time, :] = step.y
         i_time += 1
-    assert(step.t <= t1 and step.t > t1 - dt*2)
+    try:
+        assert((step.t < t1 or np.isclose(step.t, t1)) and step.t > t1 - dt*2)
+    except AssertionError as e:
+        e.args += ('current t: {}, max_t: {}, min_t: {}'.format(step.t, t1, t1-dt*2),)
+        raise
     return y
 
 dct_integrators = {

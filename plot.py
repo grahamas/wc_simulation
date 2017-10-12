@@ -39,7 +39,7 @@ class Plots(object):
             plt.clf()
 
     def multiline_plot(self, list_arrs, list_names, **kwargs):
-        assert len(list_arrs) == len(list_names)
+        #assert len(list_arrs) == len(list_names)
         for arr in list_arrs:
             plt.plot(arr)
         plt.legend(list_names)
@@ -118,7 +118,7 @@ class WC1DMovie(Movie):
             yield frame[i_pop,:]
         yield np.sum(frame,axis=1)
 
-class LinesMovieFromSepPops(Movie):
+class LinesMovie(Movie):
     def __init__(self, *, lines_data, **kwargs):
         super().__init__(**kwargs)
         # Remember, this subsampling makes a VIEW so don't change the data itself.
@@ -153,6 +153,6 @@ class LinesMovieFromSepPops(Movie):
         return self.lines
 
 movie_classes_dct = {
-        "multi_line": LinesMovieFromSepPops
+        "lines": LinesMovie
         }
 

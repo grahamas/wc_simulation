@@ -9,7 +9,7 @@ if subsample is 0:
 
 runner.run_simulation(json_file_name="replicate_neuman.json",
         json_dir = 'params',
-        run_name = "reversed_thresholds_test",
+        run_name = "traveling_wave_tests",
         # Simulation parameters here
         model_modifications = {
             'stimulus': {
@@ -20,6 +20,8 @@ runner.run_simulation(json_file_name="replicate_neuman.json",
                     'width': 1
                     }
                 },
+            "w": [[16.0, -18.2],
+                [27.0, -4.0]],
             "nonlinearity": {
                 "name": "sigmoid_norm_rectify",
                 "args": {
@@ -29,8 +31,8 @@ runner.run_simulation(json_file_name="replicate_neuman.json",
             },
             'noiseless': True,
             'lattice': {
-                'space_extent': 100.5, 'space_step': 0.5,
-                'time_extent': 1, 'time_step': dt,
+                'space_extent': 400.5, 'space_step': 0.5,
+                'time_extent': 4, 'time_step': dt,
                 'n_populations': 2, 'population_names': ['E', 'I']
                 },
             'solver': {

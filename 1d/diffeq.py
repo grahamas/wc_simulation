@@ -55,7 +55,6 @@ def beurle_mkfn(*, lattice, stimulus, m):
         return new_activity
     return beurle56
 
-
 def wilsoncowan73_mkfn(*, lattice, stimulus, nonlinearity, s,
     beta, alpha, r, w, tau, noise_SNR, mean_background_input, noiseless=False):
     """
