@@ -12,6 +12,14 @@ runner.run_simulation(json_file_name="one_pop.json",
         run_name = 'one_pop_test',
         # Simulation parameters here
         model_modifications = {
+            'stimulus': {
+                'name': 'square_pulse',
+                'args': {
+                    'duration': 1,
+                    'strength': 2,
+                    'width': 1
+                    }
+                },
             'lattice': {
                 'space_extent': 100.5, 'space_step': 0.5,
                 'time_extent': 2.81, 'time_step': dt,
