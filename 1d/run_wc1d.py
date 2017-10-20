@@ -1,6 +1,5 @@
 import runner
 import traceback
-import numpy as np
 
 dt = 1e-4
 effective_rate = 0.01
@@ -32,8 +31,8 @@ runner.run_simulation(json_file_name="replicate_neuman.json",
             },
             'noiseless': True,
             'lattice': {
-                'space_extent': 400.5, 'space_step': 0.5,
-                'time_extent': 4, 'time_step': dt,
+                'space_extent': 200.5, 'space_step': 0.5,
+                'time_extent': 2, 'time_step': dt,
                 'n_populations': 2, 'population_names': ['E', 'I']
                 },
             'solver': {

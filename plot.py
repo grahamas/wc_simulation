@@ -26,7 +26,7 @@ class Plots(object):
         plt.savefig(self.results.pathify(name, subdir))
 
     def post_plot(self, *, xlabel, ylabel, title, save_to=None,
-        subdir='', show=None, clear=True):
+        subdir='', show=None, clear=True, close=True):
         if show is None: # Can't just "or" bc local should override
             show = self.show
         plt.xlabel(xlabel)
@@ -37,6 +37,8 @@ class Plots(object):
             plt.show()
         if clear:
             plt.clf()
+        if close:
+            self.close_figs()
 
     def multiline_plot(self, list_arrs, list_names, **kwargs):
         #assert len(list_arrs) == len(list_names)
@@ -50,7 +52,7 @@ class Plots(object):
         list_arrs = dict_arrs.values()
         self.multiline_plot(list_arrs, list_names, **kwargs)
 
-    def imshow(self, arr, aspect=None, **kwargs):
+    def imshow(self, arr, aspect='square', **kwargs):
         if aspect is 'square':
             aspect = self.space_max / self.time_max
         plt.imshow(arr, aspect=aspect,
@@ -74,14 +76,15 @@ class Plots(object):
 
 class Movie(object):
     def __init__(self, *, run=True, save_to='',
-            xlabel, ylabel, title, show=False, clear=False,
-            subsample=1):
+            xlabel, ylabel, title, show=False, clear=True,
+            subsample=1, close=True):
         self.fig, self.ax = plt.subplots()
         plt.xlabel(xlabel); plt.ylabel(ylabel)
         plt.title(title)
         self._run = run
         self._save_to = save_to
         self._clear = clear
+        self._close = close
         self._subsample = subsample
 
     def run(self):
@@ -98,28 +101,30 @@ class Movie(object):
         self.animation.save(self._save_to)
         if self._clear:
             plt.clf()
+        if self._close:
+            plt.close('all')
 
-class WC1DMovie(Movie):
-    def __init__(self, ar_activity, parse_frame=None, **kwargs):
-        """
-            ar_activity is assumed to be shape (n_time, n_pop, n_space).
-        """
-        super().__init__(**kwargs)
-        self.ar_activity = ar_activity
-        self.n_time, self.n_population, self.n_space = ar_activity.shape
-        self.x_space = np.linspace(-1, 1, self.n_space)
-        if parse_frame:
-            self.parse_frame = parse_frame
-        else:
-            self.parse_frame = self.default_parse_frame
-        self.n_lines = len([x for x in parse_frame(ar_activity[0,:,:])])
-        self.lines = tuple(plt.plot([], [], animated=True)[0]
-            for i_line in range(self.n_lines))
+# class WC1DMovie(Movie):
+#     def __init__(self, ar_activity, parse_frame=None, **kwargs):
+#         """
+#             ar_activity is assumed to be shape (n_time, n_pop, n_space).
+#         """
+#         super().__init__(**kwargs)
+#         self.ar_activity = ar_activity
+#         self.n_time, self.n_population, self.n_space = ar_activity.shape
+#         self.x_space = np.linspace(-1, 1, self.n_space)
+#         if parse_frame:
+#             self.parse_frame = parse_frame
+#         else:
+#             self.parse_frame = self.default_parse_frame
+#         self.n_lines = len([x for x in parse_frame(ar_activity[0,:,:])])
+#         self.lines = tuple(plt.plot([], [], animated=True)[0]
+#             for i_line in range(self.n_lines))
 
-    def default_parse_frame(self, frame):
-        for i_pop in range(self.n_population):
-            yield frame[i_pop,:]
-        yield np.sum(frame,axis=1)
+#     def default_parse_frame(self, frame):
+#         for i_pop in range(self.n_population):
+#             yield frame[i_pop,:]
+#         yield np.sum(frame,axis=1)
 
 class LinesMovie(Movie):
     def __init__(self, *, lines_data, **kwargs):
