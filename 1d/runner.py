@@ -43,14 +43,14 @@ def simulate(*, lattice, solver, factory, **params):
 
     return activity
 
-@load_args_from_file
+@load_args_from_file()
 def run_simulation(*, run_name, figure_params, analysis_params,
-    **model_params):
+    modifications={}, **model_params):
     """
         Run the simulation resulting from simulate_neuman, and
         save results.
     """
-
+    model_params = {**model_params, **modifications}
     params['lattice'] =\
         Lattice1D(**inner_dcts_pop(params, ['space', 'time', 'populations']))
 
